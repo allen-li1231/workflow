@@ -16,7 +16,7 @@ __all__ = ["hue", "Notebook", "Hue_download"]
 class hue():
     def __init__(self, USERNAME, PASSWORD,
                  name="", description="",
-                 hive_settings=Notebook.PERFORMANT_SETTINGS,
+                 hive_settings=Notebook.PERFORMANCE_SETTINGS,
                  verbose=False):
         # global hue_sys,download
         self.hue_sys = Notebook(name=name,

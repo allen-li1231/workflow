@@ -1,15 +1,16 @@
-import os
+import copy
+import csv
 import json
 import logging
+import os
 import time
 import traceback
 import uuid
-import copy
 from datetime import datetime
 from html import unescape
 from unicodedata import normalize
+
 import requests
-import csv
 
 from . import logger
 from .decorators import retry, ensure_login
@@ -44,13 +45,13 @@ class Notebook(requests.Session):
 
     BASE_URL = "http://10.19.185.29:8889"
 
-    PERFORMANT_SETTINGS = {
+    PERFORMANCE_SETTINGS = {
         "hive.execution.engine": "tez",
         "hive.exec.parallel.thread": "true",
         "hive.exec.dynamic.partition.mode": "nonstrict",
         "hive.vectorized.execution.reduce.enabled": "true",
         "hive.tez.auto.reducer.parallelism": "true",
-    }
+        }
 
     def __init__(self,
                  username: str = None,
@@ -58,7 +59,7 @@ class Notebook(requests.Session):
                  base_url: str = None,
                  name: str = "",
                  description: str = "",
-                 hive_settings=PERFORMANT_SETTINGS,
+                 hive_settings=PERFORMANCE_SETTINGS,
                  verbose: bool = False):
 
         self.name = name
@@ -83,7 +84,7 @@ class Notebook(requests.Session):
                                      "AppleWebKit/537.36 (KHTML, like Gecko) " \
                                      "Chrome/76.0.3809.100 Safari/537.36"
         if self.username is not None \
-            and password is not None:
+                and password is not None:
             self.login(self.username, password)
 
     def _set_log(self, name, verbose):
@@ -100,7 +101,6 @@ class Notebook(requests.Session):
                         handler.setLevel(logging.INFO)
                     else:
                         handler.setLevel(logging.WARNING)
-
 
     def login(self, username: str = None, password: str = None):
         self.is_logged_in = False
@@ -154,17 +154,17 @@ class Notebook(requests.Session):
             'functions-next_form_id': 0,
             'query-email_notify': False,
             'query-is_parameterized': True,
-        }
+            }
 
         self.headers["Referer"] = self.base_url + '/beeswax'
-        excecute_url = self.base_url + '/beeswax/api/query/execute/'
+        execute_url = self.base_url + '/beeswax/api/query/execute/'
 
         res = self.post(
-            excecute_url,
+            execute_url,
             data=query_data,
             headers=self.headers,
             cookies=self.cookies,
-        )
+            )
         self.log.debug(f"beeswax response: {res.json()}")
         assert res.status_code == 200
 
@@ -185,10 +185,9 @@ class Notebook(requests.Session):
                 data=query_data,
                 headers=self.headers,
                 cookies=self.cookies
-            )
+                )
 
-            self.json = r.json()
-            r_json = self.json
+            r_json = r.json()
             self.log.debug(f"beeswax watch job {int(job_id)} responds: {r_json}")
             try:
 
@@ -212,7 +211,7 @@ class Notebook(requests.Session):
             url,
             headers=self.headers,
             cookies=self.cookies,
-        )
+            )
         self.log.debug(f"beeswax table_detail responses: {r.text}")
         r_json = r.json()
 
@@ -233,8 +232,8 @@ class Notebook(requests.Session):
             data={
                 "type": "hive",
                 "directory_uuid": ""
-            }
-        )
+                }
+            )
         self.log.debug(f"create notebook response: {res.text}")
         r_json = res.json()
         self.notebook = r_json["notebook"]
@@ -263,16 +262,16 @@ class Notebook(requests.Session):
                 "type": self.notebook["type"],
                 "name": self.notebook["name"],
                 "description": self.notebook["description"],
-            }),
+                }),
             "session": json.dumps({"type": "hive"}),
-        }
+            }
 
         r = self.post(
             url,
             headers=self.headers,
             cookies=self.cookies,
             data=payload
-        )
+            )
         self.log.debug(f"create session response: {r.text}")
         r_json = r.json()
         self.session = r_json["session"]
@@ -330,18 +329,18 @@ class Notebook(requests.Session):
                         "statement_id": 0,
                         "statements_count": len(statements_list),
                         "previous_statement_hash": None
-                    },
+                        },
                     "statement_id": 0,
                     "statements_count": len(statements_list),
                     "fetchedOnce": False,
                     "startTime": timestamp,
                     "endTime": timestamp,
                     "executionTime": 0,
-                },
+                    },
                 "database": database,
                 "lastExecuted": int(datetime.now().timestamp() * 10 ** 3),
                 "wasBatchExecuted": False
-            }
+                }
 
     def execute(self,
                 sql: str,
@@ -384,8 +383,8 @@ class Notebook(requests.Session):
     @ensure_login
     def _execute(self, sql: str):
         sql_print = sql[: MAX_LEN_PRINT_SQL] + "..." \
-                    if len(sql) > MAX_LEN_PRINT_SQL \
-                    else sql
+            if len(sql) > MAX_LEN_PRINT_SQL \
+            else sql
         self.log.info(f"executing sql: {sql_print}")
         url = self.base_url + "/notebook/api/execute/hive"
         res = self.post(url,
@@ -443,14 +442,14 @@ class Notebook(requests.Session):
 
     def new_notebook(self,
                      name="", description="",
-                     hive_settings=PERFORMANT_SETTINGS,
+                     hive_settings=PERFORMANCE_SETTINGS,
                      verbose: bool = None):
         new_nb = copy.deepcopy(self)
 
         new_nb.name = name
         new_nb.description = description
         new_nb.base_url = self.base_url
-        new_nb.hive_settings=hive_settings
+        new_nb.hive_settings = hive_settings
         new_nb.username = self.username
         new_nb.is_logged_in = self.is_logged_in
         new_nb.verbose = verbose or self.verbose
@@ -469,7 +468,7 @@ class Notebook(requests.Session):
                         data={
                             "notebook": json.dumps(self.notebook),
                             "doc_type": "hive"
-                        })
+                            })
         self.log.debug(f"clear history response: {res.text}")
         return res
 
@@ -494,8 +493,9 @@ class Notebook(requests.Session):
 
 class NotebookResult(object):
     """
-    An intergraded class to interat with executed sql result
+    An integrated class to interact with executed sql result
     """
+
     def __init__(self, notebook):
         self.name = notebook.name
         self.base_url = notebook.base_url
@@ -518,6 +518,7 @@ class NotebookResult(object):
                         handler.setLevel(logging.INFO)
                     else:
                         handler.setLevel(logging.WARNING)
+
     @retry()
     @ensure_login
     def check_status(self):
@@ -542,7 +543,7 @@ class NotebookResult(object):
         while i < attempts:
             msg = f"({i}/{attempts})" if not attempts == float("inf") else ""
             msg = f"awaiting result " \
-                  f"elapsed {time.perf_counter() - start_time:.2f} secs" \
+                      f"elapsed {time.perf_counter() - start_time:.2f} secs" \
                   + msg
             self.log.debug(msg)
 
@@ -558,7 +559,7 @@ class NotebookResult(object):
         self.log.warning(
             f"result not ready for sql: "
             f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}"
-        )
+            )
 
     @property
     def is_ready(self):
@@ -571,8 +572,8 @@ class NotebookResult(object):
         res = res.json()["result"]
 
         lst_data = [[normalize("NFKC", unescape(s))
-                        if isinstance(s, str) else s
-                        for s in row]
+                     if isinstance(s, str) else s
+                     for s in row]
                     for row in res["data"]]
 
         lst_metadata = [m["name"].rpartition(".")[2]
@@ -582,8 +583,8 @@ class NotebookResult(object):
             res = self._fetch_result(start_over=False)
             res = res.json()["result"]
             lst_data.extend([[normalize("NFKC", unescape(s))
-                                if isinstance(s, str) else s
-                                for s in row]
+                              if isinstance(s, str) else s
+                              for s in row]
                              for row in res["data"]])
 
         self.data = {"data": lst_data, "columns": lst_metadata}
@@ -649,7 +650,7 @@ class NotebookResult(object):
             "snippet": json.dumps(self.snippet),
             "rows": rows,
             "startOver": "true" if start_over else "false"
-        }
+            }
 
         res = self.post(url, data=payload)
         return res
