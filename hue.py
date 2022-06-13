@@ -644,10 +644,10 @@ class NotebookResult(object):
             while res["has_more"]:
                 res = self._fetch_result(start_over=False)
                 res = res.json()["result"]
-                lst_data.extend([[normalize("NFKC", unescape(s))
-                                  if isinstance(s, str) else s
-                                  for s in row]
-                                 for row in res["data"]])
+                lst_data = [[normalize("NFKC", unescape(s))
+                             if isinstance(s, str) else s
+                             for s in row]
+                            for row in res["data"]]
 
                 writer.writerows(lst_data)
 
