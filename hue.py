@@ -623,8 +623,9 @@ class NotebookResult(object):
             os.makedirs(abs_dir)
 
         abs_path = os.path.join(abs_dir, base_name)
+
         self.log.info(f"downloading to {abs_path}")
-        with open(abs_path, "w") as f:
+        with open(abs_path, "w", newline="") as f:
             writer = csv.writer(f)
 
             res = self._fetch_result(start_over=True)
