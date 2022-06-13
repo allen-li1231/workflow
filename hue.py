@@ -13,7 +13,7 @@ from unicodedata import normalize
 import requests
 
 from . import logger
-from .decorators import retry, ensure_login
+from .decorators import retry, ensure_login, ensure_active_session
 
 __all__ = ["Notebook"]
 
@@ -275,6 +275,8 @@ class Notebook(requests.Session):
         self.log.debug(f"create session response: {r.text}")
         r_json = r.json()
         self.session = r_json["session"]
+
+        self._session_time = time.perf_counter()
         return r
 
     def _prepare_notebook(self, name="", description=""):
@@ -380,6 +382,7 @@ class Notebook(requests.Session):
         return self._result
 
     @retry()
+    @ensure_active_session
     @ensure_login
     def _execute(self, sql: str):
         sql_print = sql[: MAX_LEN_PRINT_SQL] + "..." \
@@ -391,8 +394,11 @@ class Notebook(requests.Session):
                         data={"notebook": json.dumps(self.notebook),
                               "snippet": json.dumps(self.snippet)},
                         )
+
+        self._session_time = time.perf_counter()
         return res
 
+    @retry()
     @ensure_login
     def _close_statement(self):
         self.log.info(f"closing statement")
@@ -404,6 +410,7 @@ class Notebook(requests.Session):
         self.log.debug(f"close statement response: {res.text}")
         return res
 
+    @retry()
     @ensure_login
     def _close_session(self):
         self.log.info(f"closing session")
@@ -414,6 +421,7 @@ class Notebook(requests.Session):
         self.log.debug(f"close session response: {res.text}")
         return res
 
+    @retry()
     @ensure_login
     def close_notebook(self):
         if not hasattr(self, "notebook"):
@@ -430,6 +438,7 @@ class Notebook(requests.Session):
 
     def logout(self):
         self.close()
+        self.is_logged_in = False
         return self._logout()
 
     @retry()
@@ -503,7 +512,8 @@ class NotebookResult(object):
         self.snippet = notebook.snippet
         self.is_logged_in = notebook.is_logged_in
         self.verbose = notebook.verbose
-        self.post = notebook.post
+
+        self._notebook = notebook
 
         self.log = logging.getLogger(__name__ + f".NotebookResult[{notebook.name}]")
         if len(self.log.handlers) == 0:
@@ -520,13 +530,12 @@ class NotebookResult(object):
                         handler.setLevel(logging.WARNING)
 
     @retry()
-    @ensure_login
     def check_status(self):
         self.log.info(f"checking status")
         url = self.base_url + "/notebook/api/check_status"
-        res = self.post(url,
-                        data={"notebook": json.dumps({"id": self.notebook["uuid"]})}
-                        )
+        res = self._notebook.post(url,
+                                  data={"notebook": json.dumps({"id": self.notebook["uuid"]})}
+                                  )
         self.log.debug(f"check session response: {res.text}")
         r_json = res.json()
         if r_json["status"] != 0:
@@ -534,7 +543,11 @@ class NotebookResult(object):
                                + r_json["message"])
             raise RuntimeError(r_json["message"])
 
-        self.snippet["status"] = r_json["query_status"]["status"]
+        status = r_json["query_status"]["status"]
+        if status == "running":
+            self._notebook._session_time = time.perf_counter()
+
+        self.snippet["status"] = status
         return res
 
     def await_result(self, attempts: int = float("inf"), wait_sec: int = 3):
@@ -638,7 +651,6 @@ class NotebookResult(object):
                 writer.writerows(lst_data)
 
     @retry()
-    @ensure_login
     def _fetch_result(self, rows: int = 100000, start_over=False):
         self.log.info(f"fetching result")
         if not self.snippet["status"] == "available":
@@ -652,5 +664,5 @@ class NotebookResult(object):
             "startOver": "true" if start_over else "false"
             }
 
-        res = self.post(url, data=payload)
+        res = self._notebook.post(url, data=payload)
         return res

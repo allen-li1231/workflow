@@ -20,6 +20,18 @@ def ensure_login(func):
     return wrapper
 
 
+def ensure_active_session(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if time.perf_counter() - self._session_time >= 3600.:
+            logger = logging.getLogger(func.__name__)
+            logger.exception(f"notebook session expired while calling {func.__name__}")
+            self._prepare_notebook()
+
+        return func(self, *args, **kwargs)
+
+    return wrapper
+
 def retry(attempts: int = 3, wait_sec: int = 3):
     def retry_wrapper(func):
         @wraps(func)
