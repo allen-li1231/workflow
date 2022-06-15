@@ -11,20 +11,24 @@
 import workflow
 import pandas as pd
 
-HUE = workflow.hue(USERNAME, PASSWORD)
+HUE = workflow.hue("USERNAME", "PASSWORD")
 result = HUE.hue_sys.execute("select 1;)
 
 # 直接拉取
 data = result.fetchall()
 
 # 或使用下载平台
-data = HUE.download_data(table_name=TABLE_NAME,
-                         reason=YOUR_REASON,
+data = HUE.download_data(table_name="TABLE_NAME",
+                         reason="YOUR_REASON",
                          Decode_col=COL_TO_DECODE)
                          
 # 使用Pandas API
 df = pd.DataFrame(**data)
 df.head()
+
+# 或直接保存csv到本地
+result = HUE.hue_sys.execute("select 1;")
+result.to_csv("PATH_TO_CSV_FILE")
 ```
 
 > Note: workflow.hue.Notebook提供了更为丰富的接口，可以使用上面的HUE.hue_sys获得notebook实例，也可以对Notebook显式地调用，参考如下：
@@ -70,6 +74,7 @@ notebook.logout()
 ``` python
 import time
 from workflow.hue import Notebook
+
 notebook = Notebook(name="Notebook name",
                     description="Notebook description",
                     hive_settings=None, # 无需执行加速指令

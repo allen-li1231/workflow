@@ -497,6 +497,7 @@ class Notebook(requests.Session):
             traceback.print_exception(exc_type, exc_value, tb)
 
         self.close()
+        self.logout()
 
 
 class NotebookResult(object):
