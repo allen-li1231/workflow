@@ -437,7 +437,6 @@ class Notebook(requests.Session):
         return res
 
     def logout(self):
-        self.close()
         self.is_logged_in = False
         return self._logout()
 
