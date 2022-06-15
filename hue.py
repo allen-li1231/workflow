@@ -217,8 +217,8 @@ class Notebook(requests.Session):
 
         return r_json
 
-    @retry()
     @ensure_login
+    @retry()
     def _create_notebook(self, name="", description=""):
         self.log.info("creating notebook")
         url = self.base_url + "/notebook/api/create_notebook"
@@ -241,8 +241,8 @@ class Notebook(requests.Session):
         self.notebook["description"] = description
         return res
 
-    @retry()
     @ensure_login
+    @retry()
     def _create_session(self):
         self.log.info("creating session")
         url = self.base_url + "/notebook/api/create_session"
@@ -381,9 +381,9 @@ class Notebook(requests.Session):
 
         return self._result
 
-    @retry()
     @ensure_active_session
     @ensure_login
+    @retry()
     def _execute(self, sql: str):
         sql_print = sql[: MAX_LEN_PRINT_SQL] + "..." \
             if len(sql) > MAX_LEN_PRINT_SQL \
@@ -398,8 +398,17 @@ class Notebook(requests.Session):
         self._session_time = time.perf_counter()
         return res
 
-    @retry()
+    def set_priority(self, priority: str):
+        """
+        Set the priority for Hive Query
+
+        :param priority: Enumerate in "VERY_HIGH", "HIGH", "NORMAL", "LOW", "VERY_LOW"
+
+        """
+        self.execute(f"SET mapreduce.job.priority={priority.upper()}")
+
     @ensure_login
+    @retry()
     def _close_statement(self):
         self.log.info(f"closing statement")
         url = self.base_url + "/notebook/api/close_statement"
@@ -410,8 +419,8 @@ class Notebook(requests.Session):
         self.log.debug(f"close statement response: {res.text}")
         return res
 
-    @retry()
     @ensure_login
+    @retry()
     def _close_session(self):
         self.log.info(f"closing session")
         url = self.base_url + "/notebook/api/close_session/"
@@ -421,8 +430,8 @@ class Notebook(requests.Session):
         self.log.debug(f"close session response: {res.text}")
         return res
 
-    @retry()
     @ensure_login
+    @retry()
     def close_notebook(self):
         if not hasattr(self, "notebook"):
             self.log.warning("notebook not created yet")
@@ -467,8 +476,8 @@ class Notebook(requests.Session):
 
         return new_nb
 
-    @retry()
     @ensure_login
+    @retry()
     def _clear_history(self):
         self.log.info(f"clearing history")
         url = self.base_url + f'/notebook/api/clear_history/'
