@@ -217,8 +217,8 @@ class Notebook(requests.Session):
 
         return r_json
 
-    @ensure_login
     @retry()
+    @ensure_login
     def _create_notebook(self, name="", description=""):
         self.log.info("creating notebook")
         url = self.base_url + "/notebook/api/create_notebook"
@@ -241,8 +241,8 @@ class Notebook(requests.Session):
         self.notebook["description"] = description
         return res
 
-    @ensure_login
     @retry()
+    @ensure_login
     def _create_session(self):
         self.log.info("creating session")
         url = self.base_url + "/notebook/api/create_session"
@@ -381,9 +381,9 @@ class Notebook(requests.Session):
 
         return self._result
 
+    @retry()
     @ensure_active_session
     @ensure_login
-    @retry()
     def _execute(self, sql: str):
         sql_print = sql[: MAX_LEN_PRINT_SQL] + "..." \
             if len(sql) > MAX_LEN_PRINT_SQL \
@@ -407,8 +407,8 @@ class Notebook(requests.Session):
         """
         self.execute(f"SET mapreduce.job.priority={priority.upper()}")
 
-    @ensure_login
     @retry()
+    @ensure_login
     def _close_statement(self):
         self.log.info(f"closing statement")
         url = self.base_url + "/notebook/api/close_statement"
@@ -419,8 +419,8 @@ class Notebook(requests.Session):
         self.log.debug(f"close statement response: {res.text}")
         return res
 
-    @ensure_login
     @retry()
+    @ensure_login
     def _close_session(self):
         self.log.info(f"closing session")
         url = self.base_url + "/notebook/api/close_session/"
@@ -430,8 +430,8 @@ class Notebook(requests.Session):
         self.log.debug(f"close session response: {res.text}")
         return res
 
-    @ensure_login
     @retry()
+    @ensure_login
     def close_notebook(self):
         if not hasattr(self, "notebook"):
             self.log.warning("notebook not created yet")
@@ -476,8 +476,8 @@ class Notebook(requests.Session):
 
         return new_nb
 
-    @ensure_login
     @retry()
+    @ensure_login
     def _clear_history(self):
         self.log.info(f"clearing history")
         url = self.base_url + f'/notebook/api/clear_history/'
@@ -523,6 +523,10 @@ class NotebookResult(object):
         self.verbose = notebook.verbose
 
         self._notebook = notebook
+
+        # the proxy might fail to respond when the response body becomes too large
+        # manually set it smaller if so
+        self.rows_per_fetch = 32768
 
         self.log = logging.getLogger(__name__ + f".NotebookResult[{notebook.name}]")
         if len(self.log.handlers) == 0:
@@ -661,7 +665,7 @@ class NotebookResult(object):
                 writer.writerows(lst_data)
 
     @retry()
-    def _fetch_result(self, rows: int = 100000, start_over=False):
+    def _fetch_result(self, rows: int = None, start_over=False):
         self.log.info(f"fetching result")
         if not self.snippet["status"] == "available":
             raise AssertionError("result not ready yet")
@@ -670,7 +674,7 @@ class NotebookResult(object):
         payload = {
             "notebook": json.dumps(self.notebook),
             "snippet": json.dumps(self.snippet),
-            "rows": rows,
+            "rows": rows if isinstance(rows, int) else self.rows_per_fetch,
             "startOver": "true" if start_over else "false"
             }
 

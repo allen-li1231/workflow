@@ -32,6 +32,7 @@ def ensure_active_session(func):
 
     return wrapper
 
+
 def retry(attempts: int = 3, wait_sec: int = 3):
     def retry_wrapper(func):
         @wraps(func)
@@ -45,9 +46,19 @@ def retry(attempts: int = 3, wait_sec: int = 3):
                     logger.debug(f"response {i}/{attempts} attempts: {text}")
                     if res.status_code == 200:
                         return res
-                    else:
-                        logger.warning(f"response error in {i}/{attempts} attempts: {text}")
-                        time.sleep(wait_sec)
+
+                    logger.warning(f"response error in {i}/{attempts} attempts: {text}")
+                    if func.__name__ == "_fetch_result" \
+                            and "Proxy Error" in res.text:
+                        error_msg = "the proxy server is down. " \
+                                    "perhaps due to large result of sql query.\n" \
+                                    "please hold a while and retry " \
+                                    "by setting Notebook.rows_per_fetch smaller"
+                        logger.exception(error_msg)
+                        raise RuntimeError(error_msg)
+
+                    i += 1
+                    time.sleep(wait_sec)
                 except Exception as e:
                     logger.warning(f"exception thrown in {i}/{attempts} attempts:")
                     logger.warning(e)
