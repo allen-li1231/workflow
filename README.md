@@ -11,7 +11,12 @@
 import workflow
 import pandas as pd
 
+# 可直接提供密码（不推荐，他人pull你的repo的时候会看到你的明文密码）
 HUE = workflow.hue("USERNAME", "PASSWORD")
+
+# 仅提供username，会在程序运行的shell提示输入密码（推荐）
+HUE = workflow.hue("USERNAME")
+
 result = HUE.hue_sys.execute("select 1;)
 
 # 直接拉取
@@ -36,7 +41,8 @@ result.to_csv("PATH_TO_CSV_FILE")
 ### 使用hue.Notebook调用hue notebook api
 ``` python
 # 使用方法1
-with Notebook("USERNAME", "PASSWORD",
+with Notebook("USERNAME",
+              "PASSWORD",   # 不推荐明文密码，建议仅提供username，然后程序运行时在命令行输入密码
               name="Notebook name",
               description="Notebook description",
               verbose=True)\
@@ -51,7 +57,7 @@ notebook = Notebook(name="Notebook name",
                     description="Notebook description",
                     verbose=True)
 
-with notebook.login("USERNAME", "PASSWORD"):
+with notebook.login("USERNAME"):
     res = notebook.execute("SET hive.execution.engine;")
     data = res.fetchall()
 
@@ -59,7 +65,7 @@ with notebook.login("USERNAME", "PASSWORD"):
 # 使用方法3
 notebook = Notebook(name="Notebook name",
                     description="Notebook description")
-notebook.login("USERNAME", "PASSWORD")
+notebook.login("USERNAME")
 res = notebook.execute("SET hive.execution.engine;")
 data = res.fetchall()
 
@@ -79,6 +85,8 @@ notebook = Notebook(name="Notebook name",
                     description="Notebook description",
                     hive_settings=None, # 无需执行加速指令
                     verbose=True)
+notebook.login("USER_NAME")
+
 d_notebook = {}
 for sql in LST_SQLS:
     # 打开新的notebook

@@ -14,19 +14,24 @@ __all__ = ["hue", "Notebook", "Hue_download"]
 
 
 class hue():
-    def __init__(self, USERNAME, PASSWORD,
+    def __init__(self, username: str, password: str = None,
                  name="", description="",
                  hive_settings=Notebook.PERFORMANCE_SETTINGS,
                  verbose=False):
-        # global hue_sys,download
+
+        # global hue_sys, download
+        if password is None:
+            print("Please provide password:", end='')
+            password = input("")
+
         self.hue_sys = Notebook(name=name,
                                 description=description,
                                 hive_settings=hive_settings,
                                 verbose=verbose)
         self.download = Hue_download()
-        self.download.username = USERNAME
-        self.download.password = PASSWORD
-        self.hue_sys.login(USERNAME, PASSWORD)
+        self.download.username = username
+        self.download.password = password
+        self.hue_sys.login(username, password)
         self.download.login()
 
     def run_sql(self, sql, approx_time=10, attempt_times=100, database='buffer_fk'):

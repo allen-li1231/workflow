@@ -110,8 +110,12 @@ class Notebook(requests.Session):
         if self.username is None and self._password is None:
             raise ValueError("please provide username and password")
 
-        if self.username is None or self._password is None:
+        if self.username is None and self._password is not None:
             raise KeyError("username must be specified with password")
+
+        if self.username is not None and self._password is None:
+            print("Please provide Hue password:", end='')
+            self._password = input("")
 
         self.log.info(f"logging in for user: [{self.username}]")
         login_url = self.base_url + '/accounts/login/'
