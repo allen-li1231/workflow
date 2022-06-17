@@ -526,7 +526,7 @@ class NotebookResult(object):
 
         # the proxy might fail to respond when the response body becomes too large
         # manually set it smaller if so
-        self.rows_per_fetch = 32768
+        self.rows_per_fetch = 65535
 
         self.log = logging.getLogger(__name__ + f".NotebookResult[{notebook.name}]")
         if len(self.log.handlers) == 0:
@@ -592,6 +592,23 @@ class NotebookResult(object):
         self.check_status()
         return self.snippet["status"] == "available"
 
+    @retry()
+    def _fetch_result(self, rows: int = None, start_over=False):
+        self.log.info(f"fetching result")
+        if not self.snippet["status"] == "available":
+            raise AssertionError("result not ready yet")
+
+        url = self.base_url + f'/notebook/api/fetch_result_data/'
+        payload = {
+            "notebook": json.dumps(self.notebook),
+            "snippet": json.dumps(self.snippet),
+            "rows": rows if isinstance(rows, int) else self.rows_per_fetch,
+            "startOver": "true" if start_over else "false"
+            }
+
+        res = self._notebook.post(url, data=payload)
+        return res
+
     def fetchall(self):
         self.log.info(f"fetching all")
         res = self._fetch_result(start_over=True)
@@ -616,7 +633,7 @@ class NotebookResult(object):
         self.data = {"data": lst_data, "columns": lst_metadata}
         return self.data
 
-    def to_csv(self, file_name: str = None):
+    def to_csv(self, file_name: str = None, encoding="utf-8"):
         """
         Download result of executed sql directly into a csv file.
         For now, only support csv file.
@@ -638,7 +655,7 @@ class NotebookResult(object):
         abs_path = os.path.join(abs_dir, base_name)
 
         self.log.info(f"downloading to {abs_path}")
-        with open(abs_path, "w", newline="") as f:
+        with open(abs_path, "w", newline="", encoding=encoding) as f:
             writer = csv.writer(f)
 
             res = self._fetch_result(start_over=True)
@@ -663,20 +680,3 @@ class NotebookResult(object):
                             for row in res["data"]]
 
                 writer.writerows(lst_data)
-
-    @retry()
-    def _fetch_result(self, rows: int = None, start_over=False):
-        self.log.info(f"fetching result")
-        if not self.snippet["status"] == "available":
-            raise AssertionError("result not ready yet")
-
-        url = self.base_url + f'/notebook/api/fetch_result_data/'
-        payload = {
-            "notebook": json.dumps(self.notebook),
-            "snippet": json.dumps(self.snippet),
-            "rows": rows if isinstance(rows, int) else self.rows_per_fetch,
-            "startOver": "true" if start_over else "false"
-            }
-
-        res = self._notebook.post(url, data=payload)
-        return res
