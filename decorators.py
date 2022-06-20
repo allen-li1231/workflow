@@ -1,5 +1,6 @@
 import logging
 import time
+import requests
 from functools import wraps
 
 
@@ -12,8 +13,9 @@ def ensure_login(func):
             self.login()
 
         res = func(self, *args, **kwargs)
-        if "X-Hue-Middleware-Response" in res.headers \
-            and res.headers["X-Hue-Middleware-Response"] == "LOGIN_REQUIRED":
+        if isinstance(res, requests.models.Response) \
+                and "X-Hue-Middleware-Response" in res.headers \
+                and res.headers["X-Hue-Middleware-Response"] == "LOGIN_REQUIRED":
             self.login()
         return res
 
@@ -44,26 +46,33 @@ def retry(attempts: int = 3, wait_sec: int = 3):
                     res = func(self, *args, **kwargs)
                     text = res.text if len(res.text) <= 250 else res.text[:250] + "..."
                     logger.debug(f"response {i}/{attempts} attempts: {text}")
-                    if res.status_code == 200:
-                        return res
 
-                    logger.warning(f"response error in {i}/{attempts} attempts: {text}")
-                    if func.__name__ == "_fetch_result" \
-                            and "Proxy Error" in res.text:
-                        error_msg = "the proxy server is down. " \
-                                    "perhaps due to large result of sql query.\n" \
-                                    "please hold a while and retry " \
-                                    "by setting Notebook.rows_per_fetch smaller"
-                        logger.exception(error_msg)
-                        raise RuntimeError(error_msg)
+                except KeyboardInterrupt as e:
+                    raise e
 
-                    i += 1
-                    time.sleep(wait_sec)
                 except Exception as e:
                     logger.warning(f"exception thrown in {i}/{attempts} attempts:")
                     logger.warning(e)
                     i += 1
                     time.sleep(wait_sec)
+                    continue
+
+                if res.status_code == 200:
+                    return res
+
+                logger.warning(f"response error in {i}/{attempts} attempts: {text}")
+                if func.__name__ == "_fetch_result" \
+                        and "Proxy Error" in res.text:
+                    error_msg = "the proxy server is down. " \
+                                "perhaps due to large result of sql query.\n" \
+                                "please hold a while and retry " \
+                                "by setting Notebook.rows_per_fetch smaller"
+                    logger.exception(error_msg)
+                    raise RuntimeError(error_msg)
+
+                i += 1
+                time.sleep(wait_sec)
+
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:

@@ -47,10 +47,17 @@ class Notebook(requests.Session):
 
     PERFORMANCE_SETTINGS = {
         "hive.execution.engine": "tez",
+        # refer to: "Hive Understanding concurrent sessions queue allocation"
+        "tez.queue.name": "root.root",
         "hive.exec.parallel.thread": "true",
         "hive.exec.dynamic.partition.mode": "nonstrict",
         "hive.vectorized.execution.reduce.enabled": "true",
         "hive.tez.auto.reducer.parallelism": "true",
+        "hive.exec.compress.output": "true",
+        "hive.exec.compress.intermediate": "true",
+        "hive.intermediate.compression.codec": "org.apache.hadoop.io.compress.SnappyCodec",
+        "hive.intermediate.compression.type": "BLOCK",
+        "hive.optimize.skewjoin": "true",
         }
 
     def __init__(self,
@@ -248,17 +255,16 @@ class Notebook(requests.Session):
     @retry()
     @ensure_login
     def _create_session(self):
+        # remember that this api won't always init and return a new session
+        # instead, it will return existing busy/idle session
         self.log.info("creating session")
         url = self.base_url + "/notebook/api/create_session"
         self.headers["Host"] = "10.19.185.29:8889"
         self.headers["Referer"] = "http://10.19.185.29:8889/hue/editor/?type=hive"
 
-        if not hasattr(self, "notebook"):
-            self._create_notebook()
-
         payload = {
             "notebook": json.dumps({
-                "id": None,
+                "id": None if "id" not in self.notebook else self.notebook["id"],
                 "uuid": self.notebook["uuid"],
                 "parentSavedQueryUuid": None,
                 "isSaved": self.notebook["isSaved"],
@@ -283,9 +289,12 @@ class Notebook(requests.Session):
         self._session_time = time.perf_counter()
         return r
 
-    def _prepare_notebook(self, name="", description=""):
+    def _prepare_notebook(self, name="", description="", recreate_session=False):
         self.log.info("preparing notebook")
         self._create_notebook(name, description)
+
+        if recreate_session:
+            self._close_session()
 
         self._create_session()
         self.notebook["sessions"] = [self.session]
@@ -352,38 +361,35 @@ class Notebook(requests.Session):
                 sql: str,
                 database: str = "default",
                 sync=True):
+        try:
+            if hasattr(self, "snippet"):
+                self._close_statement()
 
-        if hasattr(self, "snippet"):
-            self._close_statement()
+            self._prepare_snippet(sql, database)
+            self.notebook["snippets"] = [self.snippet]
 
-        self._prepare_snippet(sql, database)
-        self.notebook["snippets"] = [self.snippet]
-
-        r_json = self._execute(sql).json()
-        if r_json["status"] == -1:
-            self.log.error(f"server returned wrong status, response: {r_json}")
-            self._close_session()
             r_json = self._execute(sql).json()
+            if r_json["status"] != 0:
+                self.log.exception(r_json["message"])
+                raise RuntimeError(r_json["message"])
 
-        self.notebook = self.notebook.copy()
-        self.notebook["id"] = r_json["history_id"]
-        self.notebook["uuid"] = r_json["history_uuid"]
-        self.notebook["isHistory"] = True
-        self.notebook["isBatchable"] = True
+            self.notebook = self.notebook.copy()
+            self.notebook["id"] = r_json["history_id"]
+            self.notebook["uuid"] = r_json["history_uuid"]
+            self.notebook["isHistory"] = True
+            self.notebook["isBatchable"] = True
 
-        self.snippet = self.snippet.copy()
-        self.snippet["result"]["handle"] = r_json["handle"]
-        self.snippet["status"] = "running"
+            self.snippet = self.snippet.copy()
+            self.snippet["result"]["handle"] = r_json["handle"]
+            self.snippet["status"] = "running"
 
-        if r_json["status"] == 1:
-            self.log.exception(r_json["message"])
-            raise RuntimeError(r_json["message"])
+            self._result = NotebookResult(self)
+            if sync:
+                self._result.await_result()
 
-        self._result = NotebookResult(self)
-        if sync:
-            self._result.await_result()
-
-        return self._result
+            return self._result
+        except KeyboardInterrupt:
+            self.cancel_statement()
 
     @retry()
     @ensure_active_session
@@ -406,10 +412,32 @@ class Notebook(requests.Session):
         """
         Set the priority for Hive Query
 
-        :param priority: Enumerate in "VERY_HIGH", "HIGH", "NORMAL", "LOW", "VERY_LOW"
-
+        :param priority: one of "VERY_HIGH", "HIGH", "NORMAL", "LOW", "VERY_LOW",
+            case insensitive
         """
         self.execute(f"SET mapreduce.job.priority={priority.upper()}")
+
+    def recreate_session(self, hive_settings=PERFORMANCE_SETTINGS):
+        self._close_session()
+        self._create_session()
+        self.notebook["sessions"] = [self.session]
+
+        if hive_settings is not None:
+            self.log.info("setting up hive job")
+            for key, val in self.hive_settings.items():
+                self.execute(f"SET {key}={val};")
+
+    @retry()
+    @ensure_login
+    def cancel_statement(self):
+        self.log.info("cancelling statement")
+        url = self.base_url + "/notebook/api/cancel_statement"
+        res = self.post(url,
+                        data={"notebook": json.dumps(self.notebook),
+                              "snippet": json.dumps(self.snippet)},
+                        )
+        self.log.debug(f"cancel statement response: {res.text}")
+        return res
 
     @retry()
     @ensure_login
@@ -476,8 +504,8 @@ class Notebook(requests.Session):
         new_nb.verbose = verbose or self.verbose
 
         new_nb._set_log(name=name, verbose=verbose)
-        new_nb._prepare_notebook(name, description)
-
+        new_nb._prepare_notebook(name, description,
+                                 recreate_session=True)
         return new_nb
 
     @retry()
@@ -492,6 +520,11 @@ class Notebook(requests.Session):
                             })
         self.log.debug(f"clear history response: {res.text}")
         return res
+
+    def clear_history(self):
+        self._clear_history()
+        self._prepare_notebook(self.name, self.description,
+                               recreate_session=True)
 
     def close(self):
         if hasattr(self, "snippet"):
@@ -530,7 +563,7 @@ class NotebookResult(object):
 
         # the proxy might fail to respond when the response body becomes too large
         # manually set it smaller if so
-        self.rows_per_fetch = 65535
+        self.rows_per_fetch = 32768
 
         self.log = logging.getLogger(__name__ + f".NotebookResult[{notebook.name}]")
         if len(self.log.handlers) == 0:
@@ -556,40 +589,50 @@ class NotebookResult(object):
         self.log.debug(f"check session response: {res.text}")
         r_json = res.json()
         if r_json["status"] != 0:
-            self.log.exception("check status response throws exception: "
-                               + r_json["message"])
-            raise RuntimeError(r_json["message"])
+            if "message" in r_json:
+                self.log.exception("check status response throws exception: "
+                                   + r_json["message"])
+                raise RuntimeError(r_json["message"])
+            else:
+                self.log.exception("check status response throws exception: "
+                                   + r_json)
+                raise RuntimeError(r_json)
 
         status = r_json["query_status"]["status"]
         if status == "running":
             self._notebook._session_time = time.perf_counter()
+        elif status != "available":
+            self.log.warning(f"query {status}")
 
         self.snippet["status"] = status
         return res
 
     def await_result(self, attempts: int = float("inf"), wait_sec: int = 3):
-        i = 1
-        start_time = time.perf_counter()
-        while i < attempts:
-            msg = f"({i}/{attempts})" if not attempts == float("inf") else ""
-            msg = f"awaiting result " \
-                      f"elapsed {time.perf_counter() - start_time:.2f} secs" \
-                  + msg
-            self.log.debug(msg)
+        try:
+            i = 1
+            start_time = time.perf_counter()
+            while i < attempts:
+                msg = f"({i}/{attempts})" if not attempts == float("inf") else ""
+                msg = f"awaiting result " \
+                          f"elapsed {time.perf_counter() - start_time:.2f} secs" \
+                      + msg
+                self.log.debug(msg)
 
-            self.check_status()
-            if self.snippet["status"] == "available":
-                self.log.info(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
-                return
+                self.check_status()
+                if self.snippet["status"] == "available":
+                    self.log.info(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
+                    return
 
-            i += 1
-            time.sleep(wait_sec)
+                i += 1
+                time.sleep(wait_sec)
 
-        sql = self.snippet["statement"]
-        self.log.warning(
-            f"result not ready for sql: "
-            f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}"
-            )
+            sql = self.snippet["statement"]
+            self.log.warning(
+                f"result not ready for sql: "
+                f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}"
+                )
+        except KeyboardInterrupt:
+            self._notebook.cancel_statement()
 
     @property
     def is_ready(self):
