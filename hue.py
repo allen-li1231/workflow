@@ -504,8 +504,7 @@ class Notebook(requests.Session):
         new_nb.verbose = verbose or self.verbose
 
         new_nb._set_log(name=name, verbose=verbose)
-        new_nb._prepare_notebook(name, description,
-                                 recreate_session=True)
+        new_nb._prepare_notebook(name, description)
         return new_nb
 
     @retry()
