@@ -48,7 +48,7 @@ class Notebook(requests.Session):
     PERFORMANCE_SETTINGS = {
         "hive.execution.engine": "tez",
         # refer to: "Hive Understanding concurrent sessions queue allocation"
-        "tez.queue.name": "root.root",
+        "tez.queue.name": "root.fengkong",
         "hive.exec.parallel.thread": "true",
         "hive.exec.dynamic.partition.mode": "nonstrict",
         "hive.vectorized.execution.reduce.enabled": "true",
