@@ -49,15 +49,16 @@ class Notebook(requests.Session):
         "hive.execution.engine": "tez",
         # refer to: "Hive Understanding concurrent sessions queue allocation"
         "tez.queue.name": "root.root",
+        "hive.tez.auto.reducer.parallelism": "true",
+        "hive.vectorized.execution.reduce.enabled": "true",
         "hive.exec.parallel.thread": "true",
         "hive.exec.dynamic.partition.mode": "nonstrict",
-        "hive.vectorized.execution.reduce.enabled": "true",
-        "hive.tez.auto.reducer.parallelism": "true",
         "hive.exec.compress.output": "true",
         "hive.exec.compress.intermediate": "true",
         "hive.intermediate.compression.codec": "org.apache.hadoop.io.compress.SnappyCodec",
         "hive.intermediate.compression.type": "BLOCK",
         "hive.optimize.skewjoin": "true",
+        "hive.ignore.mapjoin.hint": "false"
         }
 
     def __init__(self,
@@ -678,6 +679,24 @@ class NotebookResult(object):
 
         self.data = {"data": lst_data, "columns": lst_metadata}
         return self.data
+
+    def get_logs(self):
+        res = self._get_logs()
+        return res.json()["logs"]
+
+    @retry()
+    def _get_logs(self):
+        url = self.base_url + "/notebook/api/get_logs"
+        payload = {
+            "notebook": json.dumps(self.notebook),
+            "snippet": json.dumps(self.snippet),
+            "from": 0,
+            "jobs": [],
+            "full_log": ""
+            }
+
+        res = self._notebook.post(url, data=payload)
+        return res
 
     def to_csv(self, file_name: str = None, encoding="utf-8"):
         """
