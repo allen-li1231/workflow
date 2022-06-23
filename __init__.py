@@ -97,7 +97,9 @@ class hue():
                 if result.is_ready:
                     d_result[result] = True
 
-                time.sleep(wait_sec)
+            time.sleep(wait_sec)
+
+        return list(d_result.keys())
 
     def split_table(self, table_name, table_size=None, unit_rows=100000):
         th = ThreadPoolExecutor(max_workers=3)
