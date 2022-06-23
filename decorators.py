@@ -47,7 +47,7 @@ def retry(attempts: int = 3, wait_sec: int = 3):
                     text = res.text if len(res.text) <= 250 else res.text[:250] + "..."
                     logger.debug(f"response {i}/{attempts} attempts: {text}")
 
-                except KeyboardInterrupt as e:
+                except (KeyboardInterrupt, AssertionError) as e:
                     raise e
 
                 except Exception as e:

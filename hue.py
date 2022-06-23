@@ -46,10 +46,6 @@ class Notebook(requests.Session):
     BASE_URL = "http://10.19.185.29:8889"
 
     PERFORMANCE_SETTINGS = {
-        "hive.execution.engine": "tez",
-        # refer to: "Hive Understanding concurrent sessions queue allocation"
-        "tez.queue.name": "root.fengkong",
-        "hive.tez.auto.reducer.parallelism": "true",
         "hive.vectorized.execution.reduce.enabled": "true",
         "hive.exec.parallel.thread": "true",
         "hive.exec.dynamic.partition.mode": "nonstrict",
@@ -58,7 +54,12 @@ class Notebook(requests.Session):
         "hive.intermediate.compression.codec": "org.apache.hadoop.io.compress.SnappyCodec",
         "hive.intermediate.compression.type": "BLOCK",
         "hive.optimize.skewjoin": "true",
-        "hive.ignore.mapjoin.hint": "false"
+        "hive.ignore.mapjoin.hint": "false",
+
+        # refer to: "Hive Understanding concurrent sessions queue allocation"
+        "tez.queue.name": "root.fengkong",
+        "hive.tez.auto.reducer.parallelism": "true",
+        "hive.execution.engine": "tez",
         }
 
     def __init__(self,
@@ -375,13 +376,11 @@ class Notebook(requests.Session):
                 self.log.exception(r_json["message"])
                 raise RuntimeError(r_json["message"])
 
-            self.notebook = self.notebook.copy()
             self.notebook["id"] = r_json["history_id"]
             self.notebook["uuid"] = r_json["history_uuid"]
             self.notebook["isHistory"] = True
             self.notebook["isBatchable"] = True
 
-            self.snippet = self.snippet.copy()
             self.snippet["result"]["handle"] = r_json["handle"]
             self.snippet["status"] = "running"
 
@@ -426,7 +425,7 @@ class Notebook(requests.Session):
 
         if hive_settings is not None:
             self.log.info("setting up hive job")
-            for key, val in self.hive_settings.items():
+            for key, val in hive_settings.items():
                 self.execute(f"SET {key}={val};")
 
     @retry()
@@ -555,13 +554,12 @@ class NotebookResult(object):
     def __init__(self, notebook):
         self.name = notebook.name
         self.base_url = notebook.base_url
-        self.notebook = notebook.notebook
-        self.snippet = notebook.snippet
+        self.notebook = copy.deepcopy(notebook.notebook)
+        self.snippet = copy.deepcopy(notebook.snippet)
         self.is_logged_in = notebook.is_logged_in
         self.verbose = notebook.verbose
 
         self._notebook = notebook
-
         # the proxy might fail to respond when the response body becomes too large
         # manually set it smaller if so
         self.rows_per_fetch = 32768
@@ -644,7 +642,7 @@ class NotebookResult(object):
     def _fetch_result(self, rows: int = None, start_over=False):
         self.log.info(f"fetching result")
         if not self.snippet["status"] == "available":
-            raise AssertionError("result not ready yet")
+            raise AssertionError(f"result {self.snippet['status']}")
 
         url = self.base_url + f'/notebook/api/fetch_result_data/'
         payload = {
