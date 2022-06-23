@@ -1,4 +1,5 @@
 import copy
+import gc
 import csv
 import json
 import logging
@@ -9,7 +10,6 @@ import uuid
 from datetime import datetime
 from html import unescape
 from unicodedata import normalize
-
 import requests
 
 from . import logger
@@ -139,8 +139,10 @@ class Notebook(requests.Session):
                         data=form_data,
                         cookies={},
                         headers=self.headers)
-        if res.status_code != 200:
-            self.log.exception('login failed for user [%s] at %s'
+
+        if res.status_code != 200 \
+                or f"var LOGGED_USERNAME = '';" in res.text:
+            self.log.exception('login failed for [%s] at %s'
                                % (self.username, self.base_url))
         else:
             self.log.info('login succeeful [%s] at %s'
@@ -229,9 +231,15 @@ class Notebook(requests.Session):
 
         return r_json
 
+    def _create_notebook(self, name="", description=""):
+        r_json = self.__create_notebook().json()
+        self.notebook = r_json["notebook"]
+        self.notebook["name"] = name
+        self.notebook["description"] = description
+
     @retry()
     @ensure_login
-    def _create_notebook(self, name="", description=""):
+    def __create_notebook(self):
         self.log.info("creating notebook")
         url = self.base_url + "/notebook/api/create_notebook"
         self.headers["Host"] = "10.19.185.29:8889"
@@ -247,10 +255,6 @@ class Notebook(requests.Session):
                 }
             )
         self.log.debug(f"create notebook response: {res.text}")
-        r_json = res.json()
-        self.notebook = r_json["notebook"]
-        self.notebook["name"] = name
-        self.notebook["description"] = description
         return res
 
     @retry()
@@ -290,12 +294,9 @@ class Notebook(requests.Session):
         self._session_time = time.perf_counter()
         return r
 
-    def _prepare_notebook(self, name="", description="", recreate_session=False):
+    def _prepare_notebook(self, name="", description=""):
         self.log.info("preparing notebook")
         self._create_notebook(name, description)
-
-        if recreate_session:
-            self._close_session()
 
         self._create_session()
         self.notebook["sessions"] = [self.session]
@@ -521,10 +522,10 @@ class Notebook(requests.Session):
         self.log.debug(f"clear history response: {res.text}")
         return res
 
-    def clear_history(self):
+    def clear_history(self, simple=False):
         self._clear_history()
-        self._prepare_notebook(self.name, self.description,
-                               recreate_session=True)
+        if not simple:
+            self._prepare_notebook(self.name, self.description)
 
     def close(self):
         if hasattr(self, "snippet"):
@@ -671,11 +672,16 @@ class NotebookResult(object):
 
         while res["has_more"]:
             res = self._fetch_result(start_over=False)
-            res = res.json()["result"]
-            lst_data.extend([[normalize("NFKC", unescape(s))
-                              if isinstance(s, str) else s
-                              for s in row]
-                             for row in res["data"]])
+            try:
+                res = res.json()["result"]
+            except MemoryError:
+                gc.collect()
+                res = res.json()["result"]
+            finally:
+                lst_data.extend([[normalize("NFKC", unescape(s))
+                                  if isinstance(s, str) else s
+                                  for s in row]
+                                 for row in res["data"]])
 
         self.data = {"data": lst_data, "columns": lst_metadata}
         return self.data

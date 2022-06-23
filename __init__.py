@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 import re
 import json
+import time
 import numpy as np
 from .hue import Notebook
 from .hue_download import Hue_download
@@ -81,6 +82,24 @@ class hue():
                     # print(sql)
                 result.append(th.submit(self.run_sql, sql).result())
         return result
+
+    def run_notebook_sqls(self, sqls, wait_sec=3):
+        d_result = {}
+        for sql in sqls:
+            result = self.run_notebook_sql(sql, sync=False)
+            d_result[result] = False
+
+        while not all(is_ready for is_ready in d_result.values()):
+            for result, is_ready in d_result.items():
+                if is_ready:
+                    continue
+
+                if result.is_ready:
+                    d_result[result] = True
+
+            time.sleep(wait_sec)
+
+        return list(d_result.keys())
 
     def split_table(self, table_name, table_size=None, unit_rows=100000):
         th = ThreadPoolExecutor(max_workers=3)
