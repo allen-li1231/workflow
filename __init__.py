@@ -2,22 +2,23 @@
 @Author: 王兴
          李中豪    supermrli@hotmail.com
 """
-from concurrent.futures import ThreadPoolExecutor
+import json
 import os
 import re
-import json
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import numpy as np
-from .hue import Notebook
+
+from .hue import Notebook, Beeswax, MAX_LEN_PRINT_SQL
 from .hue_download import Hue_download
 
 __all__ = ["hue", "Notebook", "Hue_download"]
 
 
 class hue():
-    def __init__(self, username: str, password: str = None,
+    def __init__(self, username: str, password: str,
                  name="", description="",
-                 hive_settings=Notebook.PERFORMANCE_SETTINGS,
+                 hive_settings=hue.PERFORMANCE_SETTINGS,
                  verbose=False):
 
         # global hue_sys, download
@@ -25,14 +26,21 @@ class hue():
             print("Please provide password:", end='')
             password = input("")
 
+        self.name = name
+        self.description = description
+        self.hive_settings = hive_settings
+        self.verbose = verbose
+
         self.hue_sys = Notebook(name=name,
                                 description=description,
                                 hive_settings=hive_settings,
                                 verbose=verbose)
+        self.beeswax = Beeswax()
         self.download = Hue_download()
         self.download.username = username
         self.download.password = password
         self.hue_sys.login(username, password)
+        self.beeswax.login(username, password)
         self.download.login()
 
     def run_sql(self, sql, approx_time=10, attempt_times=100, database='buffer_fk'):
@@ -42,21 +50,33 @@ class hue():
             attempt_times  选填，默认查询100次，尝试次数
             database 选填，默认'buffer_fk'
         """
-        result = self.hue_sys.beeswax(sql,
+        result = self.beeswax.execute(sql,
                                       database=database,
                                       approx_time=approx_time,
                                       attempt_times=attempt_times)
         return result
 
-    def run_notebook_sql(self, *args, **kwargs):
+    def run_notebook_sql(self,
+                         sql: str,
+                         database: str = "default",
+                         sync=True,
+                         new_notebook=False):
         """
             sql 查询语句
             database 选填，默认'default'
             sync 选填，True，是否异步执行sql
         """
-        return self.hue_sys.execute(*args, **kwargs)
+        if new_notebook:
+            nb = self.hue_sys.new_notebook(self.name,
+                                           self.description,
+                                           self.hive_settings,
+                                           verbose=False)
+        else:
+            nb = self.hue_sys
 
-    def run_sqls(self, sql_path, approx_time=20, attempt_times=100, workers=3):
+        return nb.execute(sql, database, sync)
+
+    def run_sqls(self, sql_path, workers=3):
         """
             使用多线程，运行多条sql
             sql_path 必填，查询语句存放目录
@@ -83,29 +103,34 @@ class hue():
                 result.append(th.submit(self.run_sql, sql).result())
         return result
 
-    def run_notebook_sqls(self, sqls, wait_sec=3):
-        d_result = {}
-        for sql in sqls:
-            result = self.run_notebook_sql(sql, sync=False)
-            d_result[result] = False
-
-        while not all(is_ready for is_ready in d_result.values()):
-            for result, is_ready in d_result.items():
-                if is_ready:
-                    continue
-
-                if result.is_ready:
-                    d_result[result] = True
-
-            time.sleep(wait_sec)
-
-        return list(d_result.keys())
+    def run_notebook_sqls(self, sqls, database="default", workers=3):
+        lst_future = []
+        lst_result = []
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            for sql in sqls:
+                lst_future.append(executor.submit(self.run_notebook_sql,
+                                                  sql,
+                                                  database=database,
+                                                  sync=True,
+                                                  new_notebook=True)
+                                  )
+            for i, future in enumerate(as_completed(lst_future)):
+                try:
+                    result = future.result()
+                    lst_result.append(result)
+                except Exception as e:
+                    self.hue_sys.log.warning(e)
+                    self.hue_sys.log.warning(
+                        f"due to exception above, "
+                        f"result of the following sql is truncated: "
+                        f"{sqls[i][: MAX_LEN_PRINT_SQL] + '...' if len(sqls[i]) > MAX_LEN_PRINT_SQL else sqls[i]}")
+        return lst_result
 
     def split_table(self, table_name, table_size=None, unit_rows=100000):
         th = ThreadPoolExecutor(max_workers=3)
         if table_size is None:
             table_m = table_name.split('.')
-            table_size = self.hue_sys.table_detail(table_m[1], table_m[0])['details']['stats']['numRows']
+            table_size = self.beeswax.table_detail(table_m[1], table_m[0])['details']['stats']['numRows']
         num_sql = '''drop table if exists {table_name}_number;
                 create table {table_name}_number as
                 select a.*,row_number() over(order by 1) cnt from {table_name} a
@@ -155,7 +180,7 @@ class hue():
             Decode_col 选填，list格式，需要解密的列，不填则不解密。
         """
         table_m = table_name.split('.')
-        table_size = int(self.hue_sys.table_detail(table_m[1], table_m[0])['details']['stats']['numRows'])
+        table_size = int(self.beeswax.table_detail(table_m[1], table_m[0])['details']['stats']['numRows'])
 
         if table_size > 100000:
             th = ThreadPoolExecutor(max_workers=3)
@@ -285,4 +310,4 @@ class hue():
             print(e)
 
     def table_detail(self, table_name, database):
-        return self.hue_sys.table_detail(table_name, database)
+        return self.beeswax.table_detail(table_name, database)

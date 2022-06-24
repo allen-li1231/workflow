@@ -15,9 +15,191 @@ import requests
 from . import logger
 from .decorators import retry, ensure_login, ensure_active_session
 
-__all__ = ["Notebook"]
+__all__ = ["Notebook", "Beeswax"]
+
+BASE_URL = "http://10.19.185.29:8889"
 
 MAX_LEN_PRINT_SQL = 50
+
+PERFORMANCE_SETTINGS = {
+    "hive.vectorized.execution.reduce.enabled": "true",
+    "hive.exec.parallel.thread": "true",
+    "hive.exec.dynamic.partition.mode": "nonstrict",
+    "hive.exec.compress.output": "true",
+    "hive.exec.compress.intermediate": "true",
+    "hive.intermediate.compression.codec": "org.apache.hadoop.io.compress.SnappyCodec",
+    "hive.intermediate.compression.type": "BLOCK",
+    "hive.optimize.skewjoin": "true",
+    "hive.ignore.mapjoin.hint": "false",
+
+    # refer to: "Hive Understanding concurrent sessions queue allocation"
+    "tez.queue.name": "root.fengkong",
+    "hive.tez.auto.reducer.parallelism": "true",
+    "hive.execution.engine": "tez",
+    }
+
+
+class Beeswax(requests.Session):
+    def __init__(self,
+                 username: str = None,
+                 password: str = None,
+                 base_url: str = None,
+                 hive_settings=PERFORMANCE_SETTINGS,
+                 verbose: bool = False):
+
+        self.hive_settings = hive_settings
+        self.verbose = verbose
+
+        self._set_log(name="Beeswax", verbose=verbose)
+
+        if base_url is None:
+            self.base_url = BASE_URL
+        else:
+            self.base_url = base_url
+
+        self.is_logged_in = False
+        self.username = username
+        self._password = password
+
+        super(Beeswax, self).__init__()
+
+        self.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) " \
+                                     "AppleWebKit/537.36 (KHTML, like Gecko) " \
+                                     "Chrome/76.0.3809.100 Safari/537.36"
+        if self.username is not None \
+                and password is not None:
+            self.login(self.username, password)
+
+    def _set_log(self, name, verbose):
+        self.log = logging.getLogger(__name__ + f".Beeswax[{name}]")
+        if len(self.log.handlers) == 0:
+            if verbose:
+                logger.setup_stdout_level(self.log, logging.INFO)
+            else:
+                logger.setup_stdout_level(self.log, logging.WARNING)
+        else:
+            for handler in self.log.handlers:
+                if isinstance(handler, logging.StreamHandler):
+                    if verbose:
+                        handler.setLevel(logging.INFO)
+                    else:
+                        handler.setLevel(logging.WARNING)
+
+    def login(self, username: str = None, password: str = None):
+        self.is_logged_in = False
+
+        self.username = username or self.username
+        self._password = password or self._password
+        if self.username is None and self._password is None:
+            raise ValueError("please provide username and password")
+
+        if self.username is None and self._password is not None:
+            raise KeyError("username must be specified with password")
+
+        if self.username is not None and self._password is None:
+            print("Please provide Hue password:", end='')
+            self._password = input("")
+
+        self.log.info(f"logging in for user: [{self.username}]")
+        login_url = self.base_url + '/accounts/login/'
+        self.get(login_url)
+        self.headers["Referer"] = login_url
+
+        form_data = dict(username=self.username,
+                         password=self._password,
+                         csrfmiddlewaretoken=self.cookies['csrftoken'],
+                         next='/')
+
+        res = self.post(login_url,
+                        data=form_data,
+                        cookies={},
+                        headers=self.headers)
+
+        if res.status_code != 200 \
+                or f"var LOGGED_USERNAME = '';" in res.text:
+            self.log.exception('login failed for [%s] at %s'
+                               % (self.username, self.base_url))
+        else:
+            self.log.info('login succeeful [%s] at %s'
+                          % (self.username, self.base_url))
+
+            self.is_logged_in = True
+            self.headers["X-CSRFToken"] = self.cookies['csrftoken']
+            self.headers["Content-Type"] = "application/x-www-form-urlencoded; " \
+                                           "charset=UTF-8"
+
+    def execute(self, query, database='buffer_fk', approx_time=5, attempt_times=100):
+        self.log.info(f"beeswax sending query: {query[: MAX_LEN_PRINT_SQL]}")
+        query_data = {
+            'query-query': query,
+            'query-database': database,
+            'settings-next_form_id': 0,
+            'file_resources-next_form_id': 0,
+            'functions-next_form_id': 0,
+            'query-email_notify': False,
+            'query-is_parameterized': True,
+            }
+
+        self.headers["Referer"] = self.base_url + '/beeswax'
+        execute_url = self.base_url + '/beeswax/api/query/execute/'
+
+        res = self.post(
+            execute_url,
+            data=query_data,
+            headers=self.headers,
+            cookies=self.cookies,
+            )
+        self.log.debug(f"beeswax response: {res.json()}")
+        assert res.status_code == 200
+
+        res_json = res.json()
+        job_id = res_json['id']
+
+        watch_url = self.base_url + res_json['watch_url']
+
+        t_sec = int(approx_time)
+        t_try = int(attempt_times)
+        t_tol = t_sec * t_try
+
+        for i in range(t_try):
+            print('waiting %3d/%d secs for job %d: %s ...' %
+                  (t_sec * i, t_tol, int(job_id), query[: MAX_LEN_PRINT_SQL]) + '\r', end='')
+            r = self.post(
+                watch_url,
+                data=query_data,
+                headers=self.headers,
+                cookies=self.cookies
+                )
+
+            r_json = r.json()
+            self.log.debug(f"beeswax watch job {int(job_id)} responds: {r_json}")
+            try:
+
+                if r_json['isSuccess']:
+                    break
+                else:
+                    time.sleep(t_sec)
+            except Exception as e:
+                self.log.error(f"beeswax waiting job error with response: {r_json['message']}")
+                self.log.exception(e)
+                raise e
+
+        return r_json
+
+    def table_detail(self, table_name, database):
+        self.log.info(f"fetching beeswax table detail: {database}.{table_name}")
+        url = self.base_url + '/beeswax/api/table/{database}/{table_name}?format=json' \
+            .format(database=database, table_name=table_name)
+
+        r = self.get(
+            url,
+            headers=self.headers,
+            cookies=self.cookies,
+            )
+        self.log.debug(f"beeswax table_detail responses: {r.text}")
+        r_json = r.json()
+
+        return r_json
 
 
 class Notebook(requests.Session):
@@ -27,7 +209,7 @@ class Notebook(requests.Session):
 
     Parameters：
     username: str, default None
-        Hue usexrname, if not provided here, user need to call self.login manually
+        Hue username, if not provided here, user need to call self.login manually
     password: str, Hue password, default None
         Hue password, if not provided here, user need to call self.login manually
     base_url: str, default None
@@ -43,31 +225,12 @@ class Notebook(requests.Session):
         whether to print log on stdout, default False
     """
 
-    BASE_URL = "http://10.19.185.29:8889"
-
-    PERFORMANCE_SETTINGS = {
-        "hive.vectorized.execution.reduce.enabled": "true",
-        "hive.exec.parallel.thread": "true",
-        "hive.exec.dynamic.partition.mode": "nonstrict",
-        "hive.exec.compress.output": "true",
-        "hive.exec.compress.intermediate": "true",
-        "hive.intermediate.compression.codec": "org.apache.hadoop.io.compress.SnappyCodec",
-        "hive.intermediate.compression.type": "BLOCK",
-        "hive.optimize.skewjoin": "true",
-        "hive.ignore.mapjoin.hint": "false",
-
-        # refer to: "Hive Understanding concurrent sessions queue allocation"
-        "tez.queue.name": "root.fengkong",
-        "hive.tez.auto.reducer.parallelism": "true",
-        "hive.execution.engine": "tez",
-        }
-
     def __init__(self,
                  username: str = None,
                  password: str = None,
-                 base_url: str = None,
                  name: str = "",
                  description: str = "",
+                 base_url: str = None,
                  hive_settings=PERFORMANCE_SETTINGS,
                  verbose: bool = False):
 
@@ -79,7 +242,7 @@ class Notebook(requests.Session):
         self._set_log(name=name, verbose=verbose)
 
         if base_url is None:
-            self.base_url = self.BASE_URL
+            self.base_url = BASE_URL
         else:
             self.base_url = base_url
 
@@ -158,79 +321,6 @@ class Notebook(requests.Session):
             self._prepare_notebook(self.name, self.description)
 
         return self
-
-    def beeswax(self, query, database='buffer_fk', approx_time=5, attempt_times=100):
-        self.log.info(f"beeswax sending query: {query[: MAX_LEN_PRINT_SQL]}")
-        query_data = {
-            'query-query': query,
-            'query-database': database,
-            'settings-next_form_id': 0,
-            'file_resources-next_form_id': 0,
-            'functions-next_form_id': 0,
-            'query-email_notify': False,
-            'query-is_parameterized': True,
-            }
-
-        self.headers["Referer"] = self.base_url + '/beeswax'
-        execute_url = self.base_url + '/beeswax/api/query/execute/'
-
-        res = self.post(
-            execute_url,
-            data=query_data,
-            headers=self.headers,
-            cookies=self.cookies,
-            )
-        self.log.debug(f"beeswax response: {res.json()}")
-        assert res.status_code == 200
-
-        res_json = res.json()
-        job_id = res_json['id']
-
-        watch_url = self.base_url + res_json['watch_url']
-
-        t_sec = int(approx_time)
-        t_try = int(attempt_times)
-        t_tol = t_sec * t_try
-
-        for i in range(t_try):
-            print('waiting %3d/%d secs for job %d: %s ...' %
-                  (t_sec * i, t_tol, int(job_id), query[: MAX_LEN_PRINT_SQL]) + '\r', end='')
-            r = self.post(
-                watch_url,
-                data=query_data,
-                headers=self.headers,
-                cookies=self.cookies
-                )
-
-            r_json = r.json()
-            self.log.debug(f"beeswax watch job {int(job_id)} responds: {r_json}")
-            try:
-
-                if r_json['isSuccess']:
-                    break
-                else:
-                    time.sleep(t_sec)
-            except Exception as e:
-                self.log.error(f"beeswax waiting job error with response: {r_json['message']}")
-                self.log.exception(e)
-                raise e
-
-        return r_json
-
-    def table_detail(self, table_name, database):
-        self.log.info(f"fetching beeswax table detail: {database}.{table_name}")
-        url = self.base_url + '/beeswax/api/table/{database}/{table_name}?format=json' \
-            .format(database=database, table_name=table_name)
-
-        r = self.get(
-            url,
-            headers=self.headers,
-            cookies=self.cookies,
-            )
-        self.log.debug(f"beeswax table_detail responses: {r.text}")
-        r_json = r.json()
-
-        return r_json
 
     def _create_notebook(self, name="", description=""):
         r_json = self.__create_notebook().json()
@@ -591,6 +681,9 @@ class NotebookResult(object):
             if "message" in r_json:
                 self.log.exception("check status response throws exception: "
                                    + r_json["message"])
+
+                log = self.get_logs()
+                self.log.exception(log)
                 raise RuntimeError(r_json["message"])
             else:
                 self.log.exception("check status response throws exception: "
