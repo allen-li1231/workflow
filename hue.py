@@ -33,10 +33,10 @@ PERFORMANCE_SETTINGS = {
     "hive.ignore.mapjoin.hint": "false",
 
     # refer to: "Hive Understanding concurrent sessions queue allocation"
-    "tez.queue.name": "root.root",
+    "tez.queue.name": "root.fengkong",
     "hive.tez.auto.reducer.parallelism": "true",
     "hive.execution.engine": "tez",
-    }
+}
 
 
 class Beeswax(requests.Session):
@@ -377,7 +377,7 @@ class Notebook(requests.Session):
             headers=self.headers,
             cookies=self.cookies,
             data=payload
-            )
+        )
         self.log.debug(f"create session response: {r.text}")
         r_json = r.json()
         self.session = r_json["session"]
@@ -385,9 +385,16 @@ class Notebook(requests.Session):
         self._session_time = time.perf_counter()
         return r
 
-    def _prepare_notebook(self, name="", description=""):
-        self.log.info("preparing notebook")
+    def _prepare_notebook(self,
+                          name="",
+                          description="",
+                          recreate_session=False):
+
+        self.log.info(f"preparing notebook[{name}]")
         self._create_notebook(name, description)
+
+        if recreate_session:
+            self._close_session()
 
         self._create_session()
         self.notebook["sessions"] = [self.session]
@@ -583,9 +590,11 @@ class Notebook(requests.Session):
     def new_notebook(self,
                      name="", description="",
                      hive_settings=PERFORMANCE_SETTINGS,
+                     recreate_session=False,
                      verbose: bool = None):
         new_nb = copy.deepcopy(self)
 
+        new_nb.username = self.username
         new_nb.name = name
         new_nb.description = description
         new_nb.base_url = self.base_url
@@ -595,7 +604,15 @@ class Notebook(requests.Session):
         new_nb.verbose = verbose or self.verbose
 
         new_nb._set_log(name=name, verbose=verbose)
-        new_nb._prepare_notebook(name, description)
+        new_nb._session_time = self._session_time
+        new_nb._password = self._password
+
+        if recreate_session:
+            new_nb._prepare_notebook(name, description, recreate_session)
+        else:
+            new_nb._create_notebook(name, description)
+            new_nb.notebook["sessions"] = [self.session]
+
         return new_nb
 
     @retry()
@@ -801,7 +818,7 @@ class NotebookResult(object):
         For now, only support csv file.
 
         :param file_name:  default notebook name
-        :return: None
+        :param encoding: file encoding, default to utf-8
         """
         if file_name is None:
             file_name = os.path.join(os.getcwd(), self.name + ".csv")
