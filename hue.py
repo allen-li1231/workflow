@@ -388,6 +388,7 @@ class Notebook(requests.Session):
     def _prepare_notebook(self,
                           name="",
                           description="",
+                          hive_settings=PERFORMANCE_SETTINGS,
                           recreate_session=False):
 
         self.log.info(f"preparing notebook[{name}]")
@@ -399,7 +400,7 @@ class Notebook(requests.Session):
         self._create_session()
         self.notebook["sessions"] = [self.session]
 
-        if self.hive_settings is not None:
+        if hive_settings is not None:
             self.log.info("setting up hive job")
             for key, val in self.hive_settings.items():
                 self.execute(f"SET {key}={val};")
@@ -601,18 +602,15 @@ class Notebook(requests.Session):
         new_nb.hive_settings = hive_settings
         new_nb.username = self.username
         new_nb.is_logged_in = self.is_logged_in
-        new_nb.verbose = verbose or self.verbose
+        new_nb.verbose = self.verbose if verbose is None else verbose
 
         new_nb._set_log(name=name, verbose=verbose)
         new_nb._session_time = self._session_time
         new_nb._password = self._password
 
-        if recreate_session:
-            new_nb._prepare_notebook(name, description, recreate_session)
-        else:
-            new_nb._create_notebook(name, description)
-            new_nb.notebook["sessions"] = [self.session]
-
+        new_nb._prepare_notebook(name, description,
+                                 hive_settings=hive_settings,
+                                 recreate_session=recreate_session)
         return new_nb
 
     @retry()
