@@ -105,7 +105,11 @@ class hue:
                 result.append(th.submit(self.run_sql, sql).result())
         return result
 
-    def run_notebook_sqls(self, sqls, database="default", n_jobs=3, ):
+    def run_notebook_sqls(self,
+                          sqls,
+                          database="default",
+                          n_jobs=3,
+                          wait_sec=3):
         while len(self.notebook_workers) < n_jobs:
             self.notebook_workers.add(self.hue_sys.new_notebook(self.name,
                                                                 self.description,
@@ -147,6 +151,8 @@ class hue:
                             f"{sqls[i][: MAX_LEN_PRINT_SQL] + '...' if len(sqls[i]) > MAX_LEN_PRINT_SQL else sqls[i]}")
                     finally:
                         i += 1
+
+            time.sleep(wait_sec)
 
         return lst_result
 
