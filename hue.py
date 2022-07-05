@@ -404,6 +404,8 @@ class Notebook(requests.Session):
             self.log.info("setting up hive job")
             for key, val in self.hive_settings.items():
                 self.execute(f"SET {key}={val};")
+                if "hive.execution.engine" == key:
+                    self.execute(f"SET hive.execution.engine={val};")
 
     def _prepare_snippet(self, sql: str = "", database="default"):
         self.log.info("preparing snippet")
@@ -525,6 +527,8 @@ class Notebook(requests.Session):
             self.log.info("setting up hive job")
             for key, val in hive_settings.items():
                 self.execute(f"SET {key}={val};")
+                if "hive.execution.engine" == key:
+                    self.execute(f"SET hive.execution.engine={val};")
 
     @retry()
     @ensure_login
