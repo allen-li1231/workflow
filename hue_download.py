@@ -198,7 +198,7 @@ class Hue_download(requests.Session):
         if r["status"] != 0:
             print(r["message"])
             return
-        t_sec = 30
+        t_sec = 10
         t_try = 100
         t_tol = t_sec * t_try
         job_id = r["id"]

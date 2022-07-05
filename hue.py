@@ -36,7 +36,7 @@ PERFORMANCE_SETTINGS = {
     "tez.queue.name": "root.fengkong",
     "hive.tez.auto.reducer.parallelism": "true",
     "hive.execution.engine": "tez",
-    }
+}
 
 
 class Beeswax(requests.Session):
@@ -377,7 +377,7 @@ class Notebook(requests.Session):
             headers=self.headers,
             cookies=self.cookies,
             data=payload
-            )
+        )
         self.log.debug(f"create session response: {r.text}")
         r_json = r.json()
         self.session = r_json["session"]
@@ -385,17 +385,27 @@ class Notebook(requests.Session):
         self._session_time = time.perf_counter()
         return r
 
-    def _prepare_notebook(self, name="", description=""):
-        self.log.info("preparing notebook")
+    def _prepare_notebook(self,
+                          name="",
+                          description="",
+                          hive_settings=PERFORMANCE_SETTINGS,
+                          recreate_session=False):
+
+        self.log.info(f"preparing notebook[{name}]")
         self._create_notebook(name, description)
+
+        if recreate_session:
+            self._close_session()
 
         self._create_session()
         self.notebook["sessions"] = [self.session]
 
-        if self.hive_settings is not None:
+        if hive_settings is not None:
             self.log.info("setting up hive job")
             for key, val in self.hive_settings.items():
                 self.execute(f"SET {key}={val};")
+                if "hive.execution.engine" == key:
+                    self.execute(f"SET hive.execution.engine={val};")
 
     def _prepare_snippet(self, sql: str = "", database="default"):
         self.log.info("preparing snippet")
@@ -517,6 +527,8 @@ class Notebook(requests.Session):
             self.log.info("setting up hive job")
             for key, val in hive_settings.items():
                 self.execute(f"SET {key}={val};")
+                if "hive.execution.engine" == key:
+                    self.execute(f"SET hive.execution.engine={val};")
 
     @retry()
     @ensure_login
@@ -583,19 +595,26 @@ class Notebook(requests.Session):
     def new_notebook(self,
                      name="", description="",
                      hive_settings=PERFORMANCE_SETTINGS,
+                     recreate_session=False,
                      verbose: bool = None):
         new_nb = copy.deepcopy(self)
 
+        new_nb.username = self.username
         new_nb.name = name
         new_nb.description = description
         new_nb.base_url = self.base_url
         new_nb.hive_settings = hive_settings
         new_nb.username = self.username
         new_nb.is_logged_in = self.is_logged_in
-        new_nb.verbose = verbose or self.verbose
+        new_nb.verbose = self.verbose if verbose is None else verbose
 
         new_nb._set_log(name=name, verbose=verbose)
-        new_nb._prepare_notebook(name, description)
+        new_nb._session_time = self._session_time
+        new_nb._password = self._password
+
+        new_nb._prepare_notebook(name, description,
+                                 hive_settings=hive_settings,
+                                 recreate_session=recreate_session)
         return new_nb
 
     @retry()
@@ -801,7 +820,7 @@ class NotebookResult(object):
         For now, only support csv file.
 
         :param file_name:  default notebook name
-        :return: None
+        :param encoding: file encoding, default to utf-8
         """
         if file_name is None:
             file_name = os.path.join(os.getcwd(), self.name + ".csv")
