@@ -318,7 +318,7 @@ class Notebook(requests.Session):
                                            "charset=UTF-8"
             self.headers["X-Requested-With"] = "XMLHttpRequest"
 
-            self._prepare_notebook(self.name, self.description)
+            self._prepare_notebook(self.name, self.description, self.hive_settings)
 
         return self
 
@@ -402,7 +402,7 @@ class Notebook(requests.Session):
 
         if hive_settings is not None:
             self.log.info("setting up hive job")
-            for key, val in self.hive_settings.items():
+            for key, val in hive_settings.items():
                 self.execute(f"SET {key}={val};")
                 if "hive.execution.engine" == key:
                     self.execute(f"SET hive.execution.engine={val};")
