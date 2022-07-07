@@ -742,11 +742,9 @@ class NotebookResult(object):
 
                 if print_log:
                     self.check_status(suppress_info=True)
-                    log = self.get_logs(self._logs_row, self.full_log)
-                    if len(log) > 0:
-                        self.full_log += "\n" + log if len(self.full_log) > 0 else log
-                        self._logs_row = self.full_log.count("\n")
-                        self.log.info(log)
+                    cloud_log = self.get_logs()
+                    if len(cloud_log) > 0:
+                        print(cloud_log)
                 else:
                     self.check_status()
 
@@ -816,10 +814,14 @@ class NotebookResult(object):
         self.data = {"data": lst_data, "columns": lst_metadata}
         return self.data
 
-    def get_logs(self, start_row=0, full_log=""):
-        res = self._get_logs(start_row, full_log)
-        r_json = res.json()
-        return r_json["logs"]
+    def get_logs(self):
+        res = self._get_logs(self._logs_row, self.full_log)
+        cloud_log = res.json()["logs"]
+        if len(cloud_log) > 0:
+            self.full_log += "\n" + cloud_log if len(self.full_log) > 0 else cloud_log
+            self._logs_row += 1 + cloud_log.count("\n")
+
+        return cloud_log
 
     @retry()
     def _get_logs(self, start_row, full_log):
