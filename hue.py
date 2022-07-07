@@ -710,14 +710,11 @@ class NotebookResult(object):
         self.log.debug(f"check status response: {res.text}")
         r_json = res.json()
         if r_json["status"] != 0:
-            log = self.get_logs(self._logs_row, self.full_log)
-            self.full_log += "\n" + log if len(self.full_log) > 0 else log
-            self._logs_row = self.full_log.count("\n")
+            self.get_logs()
+            self.log.exception(self.full_log)
             if "message" in r_json:
-                self.log.exception(self.full_log)
                 raise RuntimeError(r_json["message"])
             else:
-                self.log.exception(self.full_log)
                 raise RuntimeError(r_json)
 
         status = r_json["query_status"]["status"]
