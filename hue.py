@@ -705,8 +705,7 @@ class NotebookResult(object):
                 self.log.exception(log)
                 raise RuntimeError(r_json["message"])
             else:
-                self.log.exception("check status response throws exception: "
-                                   + r_json)
+                self.log.exception(f"check status response throws exception: {r_json}")
                 raise RuntimeError(r_json)
 
         status = r_json["query_status"]["status"]
