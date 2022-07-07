@@ -19,7 +19,7 @@ __all__ = ["Notebook", "Beeswax"]
 
 BASE_URL = "http://10.19.185.29:8889"
 
-MAX_LEN_PRINT_SQL = 50
+MAX_LEN_PRINT_SQL = 100
 
 PERFORMANCE_SETTINGS = {
     "hive.vectorized.execution.reduce.enabled": "true",
@@ -72,18 +72,20 @@ class Beeswax(requests.Session):
 
     def _set_log(self, name, verbose):
         self.log = logging.getLogger(__name__ + f".Beeswax[{name}]")
-        if len(self.log.handlers) == 0:
+        has_stream_handler = False
+        for handler in self.log.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                has_stream_handler = True
+                if verbose:
+                    handler.setLevel(logging.INFO)
+                else:
+                    handler.setLevel(logging.WARNING)
+
+        if not has_stream_handler:
             if verbose:
                 logger.setup_stdout_level(self.log, logging.INFO)
             else:
                 logger.setup_stdout_level(self.log, logging.WARNING)
-        else:
-            for handler in self.log.handlers:
-                if isinstance(handler, logging.StreamHandler):
-                    if verbose:
-                        handler.setLevel(logging.INFO)
-                    else:
-                        handler.setLevel(logging.WARNING)
 
     def login(self, username: str = None, password: str = None):
         self.is_logged_in = False
@@ -100,7 +102,7 @@ class Beeswax(requests.Session):
             print("Please provide Hue password:", end='')
             self._password = input("")
 
-        self.log.info(f"logging in for user: [{self.username}]")
+        self.log.debug(f"logging in for user: [{self.username}]")
         login_url = self.base_url + '/accounts/login/'
         self.get(login_url)
         self.headers["Referer"] = login_url
@@ -129,7 +131,7 @@ class Beeswax(requests.Session):
                                            "charset=UTF-8"
 
     def execute(self, query, database='buffer_fk', approx_time=5, attempt_times=100):
-        self.log.info(f"beeswax sending query: {query[: MAX_LEN_PRINT_SQL]}")
+        self.log.debug(f"beeswax sending query: {query[: MAX_LEN_PRINT_SQL]}")
         query_data = {
             'query-query': query,
             'query-database': database,
@@ -187,7 +189,7 @@ class Beeswax(requests.Session):
         return r_json
 
     def table_detail(self, table_name, database):
-        self.log.info(f"fetching beeswax table detail: {database}.{table_name}")
+        self.log.debug(f"fetching beeswax table detail: {database}.{table_name}")
         url = self.base_url + '/beeswax/api/table/{database}/{table_name}?format=json' \
             .format(database=database, table_name=table_name)
 
@@ -261,18 +263,20 @@ class Notebook(requests.Session):
 
     def _set_log(self, name, verbose):
         self.log = logging.getLogger(__name__ + f".Notebook[{name}]")
-        if len(self.log.handlers) == 0:
+        has_stream_handler = False
+        for handler in self.log.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                has_stream_handler = True
+                if verbose:
+                    handler.setLevel(logging.INFO)
+                else:
+                    handler.setLevel(logging.WARNING)
+
+        if not has_stream_handler:
             if verbose:
                 logger.setup_stdout_level(self.log, logging.INFO)
             else:
                 logger.setup_stdout_level(self.log, logging.WARNING)
-        else:
-            for handler in self.log.handlers:
-                if isinstance(handler, logging.StreamHandler):
-                    if verbose:
-                        handler.setLevel(logging.INFO)
-                    else:
-                        handler.setLevel(logging.WARNING)
 
     def login(self, username: str = None, password: str = None):
         self.is_logged_in = False
@@ -289,7 +293,7 @@ class Notebook(requests.Session):
             print("Please provide Hue password:", end='')
             self._password = input("")
 
-        self.log.info(f"logging in for user: [{self.username}]")
+        self.log.debug(f"logging in for user: [{self.username}]")
         login_url = self.base_url + '/accounts/login/'
         self.get(login_url)
         self.headers["Referer"] = login_url
@@ -331,7 +335,7 @@ class Notebook(requests.Session):
     @retry()
     @ensure_login
     def __create_notebook(self):
-        self.log.info("creating notebook")
+        self.log.debug("creating notebook")
         url = self.base_url + "/notebook/api/create_notebook"
         self.headers["Host"] = "10.19.185.29:8889"
         self.headers["Referer"] = "http://10.19.185.29:8889/hue/editor/?type=hive"
@@ -353,7 +357,7 @@ class Notebook(requests.Session):
     def _create_session(self):
         # remember that this api won't always init and return a new session
         # instead, it will return existing busy/idle session
-        self.log.info("creating session")
+        self.log.debug("creating session")
         url = self.base_url + "/notebook/api/create_session"
         self.headers["Host"] = "10.19.185.29:8889"
         self.headers["Referer"] = "http://10.19.185.29:8889/hue/editor/?type=hive"
@@ -391,7 +395,7 @@ class Notebook(requests.Session):
                           hive_settings=PERFORMANCE_SETTINGS,
                           recreate_session=False):
 
-        self.log.info(f"preparing notebook[{name}]")
+        self.log.debug(f"preparing notebook[{name}]")
         self._create_notebook(name, description)
 
         if recreate_session:
@@ -401,14 +405,14 @@ class Notebook(requests.Session):
         self.notebook["sessions"] = [self.session]
 
         if hive_settings is not None:
-            self.log.info("setting up hive job")
+            self.log.debug("setting up hive job")
             for key, val in hive_settings.items():
                 self.execute(f"SET {key}={val};")
                 if "hive.execution.engine" == key:
                     self.execute(f"SET hive.execution.engine={val};")
 
     def _prepare_snippet(self, sql: str = "", database="default"):
-        self.log.info("preparing snippet")
+        self.log.debug("preparing snippet")
         statements_list = sql.split(";")
         timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S:%f")[:-3] + "Z"
         if hasattr(self, "snippet"):
@@ -463,6 +467,7 @@ class Notebook(requests.Session):
     def execute(self,
                 sql: str,
                 database: str = "default",
+                print_log: bool = False,
                 sync=True):
         try:
             if hasattr(self, "snippet"):
@@ -486,7 +491,7 @@ class Notebook(requests.Session):
 
             self._result = NotebookResult(self)
             if sync:
-                self._result.await_result()
+                self._result.await_result(print_log=print_log)
 
             return self._result
         except KeyboardInterrupt:
@@ -524,7 +529,7 @@ class Notebook(requests.Session):
         self.notebook["sessions"] = [self.session]
 
         if hive_settings is not None:
-            self.log.info("setting up hive job")
+            self.log.debug("setting up hive job")
             for key, val in hive_settings.items():
                 self.execute(f"SET {key}={val};")
                 if "hive.execution.engine" == key:
@@ -545,7 +550,7 @@ class Notebook(requests.Session):
     @retry()
     @ensure_login
     def _close_statement(self):
-        self.log.info(f"closing statement")
+        self.log.debug(f"closing statement")
         url = self.base_url + "/notebook/api/close_statement"
         res = self.post(url,
                         data={"notebook": json.dumps(self.notebook),
@@ -557,7 +562,7 @@ class Notebook(requests.Session):
     @retry()
     @ensure_login
     def _close_session(self):
-        self.log.info(f"closing session")
+        self.log.debug(f"closing session")
         url = self.base_url + "/notebook/api/close_session/"
         res = self.post(url,
                         data={"session": json.dumps(self.session)}
@@ -667,45 +672,52 @@ class NotebookResult(object):
         self.snippet = copy.deepcopy(notebook.snippet)
         self.is_logged_in = notebook.is_logged_in
         self.verbose = notebook.verbose
+        self.full_log = ""
+        self._logs_row = 0
 
         self._notebook = notebook
         # the proxy might fail to respond when the response body becomes too large
         # manually set it smaller if so
         self.rows_per_fetch = 32768
 
-        self.log = logging.getLogger(__name__ + f".NotebookResult[{notebook.name}]")
-        if len(self.log.handlers) == 0:
-            if self.verbose:
+        self._set_log(notebook.name, self.verbose)
+
+    def _set_log(self, name, verbose):
+        self.log = logging.getLogger(__name__ + f".NotebookResult[{name}]")
+        has_stream_handler = False
+        for handler in self.log.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                has_stream_handler = True
+                if verbose:
+                    handler.setLevel(logging.INFO)
+                else:
+                    handler.setLevel(logging.WARNING)
+
+        if not has_stream_handler:
+            if verbose:
                 logger.setup_stdout_level(self.log, logging.INFO)
             else:
                 logger.setup_stdout_level(self.log, logging.WARNING)
-        else:
-            for handler in self.log.handlers:
-                if isinstance(handler, logging.StreamHandler):
-                    if self.verbose:
-                        handler.setLevel(logging.INFO)
-                    else:
-                        handler.setLevel(logging.WARNING)
 
     @retry()
-    def check_status(self):
-        self.log.info(f"checking status")
+    def check_status(self, suppress_info=False):
+        if not suppress_info:
+            self.log.info(f"checking status")
         url = self.base_url + "/notebook/api/check_status"
         res = self._notebook.post(url,
                                   data={"notebook": json.dumps({"id": self.notebook["uuid"]})}
                                   )
-        self.log.debug(f"check session response: {res.text}")
+        self.log.debug(f"check status response: {res.text}")
         r_json = res.json()
         if r_json["status"] != 0:
+            log = self.get_logs(self._logs_row, self.full_log)
+            self.full_log += "\n" + log if len(self.full_log) > 0 else log
+            self._logs_row = self.full_log.count("\n")
             if "message" in r_json:
-                self.log.exception("check status response throws exception: "
-                                   + r_json["message"])
-
-                log = self.get_logs()
-                self.log.exception(log)
+                self.log.exception(self.full_log)
                 raise RuntimeError(r_json["message"])
             else:
-                self.log.exception(f"check status response throws exception: {r_json}")
+                self.log.exception(self.full_log)
                 raise RuntimeError(r_json)
 
         status = r_json["query_status"]["status"]
@@ -717,18 +729,27 @@ class NotebookResult(object):
         self.snippet["status"] = status
         return res
 
-    def await_result(self, attempts: int = float("inf"), wait_sec: int = 3):
+    def await_result(self, attempts: int = float("inf"), wait_sec: int = 3, print_log=False):
         try:
             i = 1
             start_time = time.perf_counter()
             while i < attempts:
                 msg = f"({i}/{attempts})" if not attempts == float("inf") else ""
                 msg = f"awaiting result " \
-                          f"elapsed {time.perf_counter() - start_time:.2f} secs" \
+                      f"elapsed {time.perf_counter() - start_time:.2f} secs" \
                       + msg
                 self.log.debug(msg)
 
-                self.check_status()
+                if print_log:
+                    self.check_status(suppress_info=True)
+                    log = self.get_logs(self._logs_row, self.full_log)
+                    if len(log) > 0:
+                        self.full_log += "\n" + log if len(self.full_log) > 0 else log
+                        self._logs_row = self.full_log.count("\n")
+                        self.log.info(log)
+                else:
+                    self.check_status()
+
                 if self.snippet["status"] == "available":
                     self.log.info(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
                     return
@@ -751,7 +772,7 @@ class NotebookResult(object):
 
     @retry()
     def _fetch_result(self, rows: int = None, start_over=False):
-        self.log.info(f"fetching result")
+        self.log.debug(f"fetching result")
         if not self.snippet["status"] == "available":
             raise AssertionError(f"result {self.snippet['status']}")
 
@@ -795,20 +816,21 @@ class NotebookResult(object):
         self.data = {"data": lst_data, "columns": lst_metadata}
         return self.data
 
-    def get_logs(self):
-        res = self._get_logs()
-        return res.json()["logs"]
+    def get_logs(self, start_row=0, full_log=""):
+        res = self._get_logs(start_row, full_log)
+        r_json = res.json()
+        return r_json["logs"]
 
     @retry()
-    def _get_logs(self):
+    def _get_logs(self, start_row, full_log):
         url = self.base_url + "/notebook/api/get_logs"
         payload = {
             "notebook": json.dumps(self.notebook),
             "snippet": json.dumps(self.snippet),
-            "from": 0,
-            "jobs": [],
-            "full_log": ""
-            }
+            "from": start_row,
+            "jobs": [],  # api won't read jobs, so pass an empty one won't do harm to anything
+            "full_log": full_log
+        }
 
         res = self._notebook.post(url, data=payload)
         return res
