@@ -9,7 +9,7 @@ def ensure_login(func):
     def wrapper(self, *args, **kwargs):
         if not self.is_logged_in:
             logger = logging.getLogger(func.__name__)
-            logger.exception(f"notebook not logged in while calling {func.__name__}")
+            logger.warning(f"notebook not logged in while calling {func.__name__}")
             self.login()
 
         res = func(self, *args, **kwargs)
@@ -25,9 +25,9 @@ def ensure_login(func):
 def ensure_active_session(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if time.perf_counter() - self._session_time >= 3600.:
+        if time.perf_counter() - self._session_time >= 600.:
             logger = logging.getLogger(func.__name__)
-            logger.exception(f"notebook session expired while calling {func.__name__}")
+            logger.warning(f"notebook session expired while calling {func.__name__}")
             self._prepare_notebook()
 
         return func(self, *args, **kwargs)

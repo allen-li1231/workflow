@@ -672,6 +672,8 @@ class NotebookResult(object):
         self.snippet = copy.deepcopy(notebook.snippet)
         self.is_logged_in = notebook.is_logged_in
         self.verbose = notebook.verbose
+
+        self.data = None
         self.full_log = ""
         self._logs_row = 0
 
