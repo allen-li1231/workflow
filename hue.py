@@ -389,6 +389,14 @@ class Notebook(requests.Session):
         self._session_time = time.perf_counter()
         return r
 
+    def _set_hive(self, hive_settings):
+        if hive_settings is not None:
+            self.log.debug("setting up hive job")
+            for key, val in hive_settings.items():
+                self.execute(f"SET {key}={val};")
+                if "hive.execution.engine" == key:
+                    self.execute(f"SET hive.execution.engine={val};")
+
     def _prepare_notebook(self,
                           name="",
                           description="",
@@ -399,17 +407,11 @@ class Notebook(requests.Session):
         self._create_notebook(name, description)
 
         if recreate_session:
-            self._close_session()
+            self.recreate_session(hive_settings)
+        else:
+            self._create_session()
 
-        self._create_session()
-        self.notebook["sessions"] = [self.session]
-
-        if hive_settings is not None:
-            self.log.debug("setting up hive job")
-            for key, val in hive_settings.items():
-                self.execute(f"SET {key}={val};")
-                if "hive.execution.engine" == key:
-                    self.execute(f"SET hive.execution.engine={val};")
+        self._set_hive(hive_settings)
 
     def _prepare_snippet(self, sql: str = "", database="default"):
         self.log.debug("preparing snippet")
@@ -524,16 +526,13 @@ class Notebook(requests.Session):
         self.execute(f"SET mapreduce.job.priority={priority.upper()}")
 
     def recreate_session(self, hive_settings=PERFORMANCE_SETTINGS):
+        if not hasattr(self, "session"):
+            self._create_session()
+
         self._close_session()
         self._create_session()
         self.notebook["sessions"] = [self.session]
-
-        if hive_settings is not None:
-            self.log.debug("setting up hive job")
-            for key, val in hive_settings.items():
-                self.execute(f"SET {key}={val};")
-                if "hive.execution.engine" == key:
-                    self.execute(f"SET hive.execution.engine={val};")
+        self._set_hive(hive_settings)
 
     @retry()
     @ensure_login
@@ -614,7 +613,6 @@ class Notebook(requests.Session):
         new_nb.verbose = self.verbose if verbose is None else verbose
 
         new_nb._set_log(name=name, verbose=verbose)
-        new_nb._session_time = self._session_time
         new_nb._password = self._password
 
         new_nb._prepare_notebook(name, description,
@@ -712,7 +710,7 @@ class NotebookResult(object):
         self.log.debug(f"check status response: {res.text}")
         r_json = res.json()
         if r_json["status"] != 0:
-            self.get_logs()
+            self.fetch_cloud_logs()
             self.log.exception(self.full_log)
             if "message" in r_json:
                 raise RuntimeError(r_json["message"])
@@ -741,7 +739,7 @@ class NotebookResult(object):
 
                 if print_log:
                     self.check_status(suppress_info=True)
-                    cloud_log = self.get_logs()
+                    cloud_log = self.fetch_cloud_logs()
                     if len(cloud_log) > 0:
                         print(cloud_log)
                 else:
@@ -813,9 +811,13 @@ class NotebookResult(object):
         self.data = {"data": lst_data, "columns": lst_metadata}
         return self.data
 
-    def get_logs(self):
+    def fetch_cloud_logs(self):
         res = self._get_logs(self._logs_row, self.full_log)
-        cloud_log = res.json()["logs"]
+        cloud_log = res.json()
+        if "logs" not in cloud_log:
+            raise KeyError(f"Could not parse logs from cloud response: {res.text}")
+
+        cloud_log = cloud_log["logs"]
         if len(cloud_log) > 0:
             self.full_log += "\n" + cloud_log if len(self.full_log) > 0 else cloud_log
             self._logs_row += 1 + cloud_log.count("\n")
