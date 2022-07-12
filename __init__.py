@@ -44,7 +44,7 @@ class hue:
         self.beeswax.login(username, password)
         self.download.login()
 
-        self.notebook_workers = {self.hue_sys}
+        self.notebook_workers = [self.hue_sys]
 
     def run_sql(self, sql, approx_time=10, attempt_times=100, database='default'):
         """
@@ -112,11 +112,12 @@ class hue:
                           database="default",
                           n_jobs=3,
                           wait_sec=3):
-        while len(self.notebook_workers) < n_jobs:
-            self.notebook_workers.add(self.hue_sys.new_notebook(self.name,
-                                                                self.description,
-                                                                hive_settings=None,
-                                                                verbose=self.hue_sys.verbose))
+        while len(self.notebook_workers) < len(sqls):
+            self.notebook_workers.append(self.hue_sys
+                                         .new_notebook(self.name + f"-worker-{len(self.notebook_workers)}",
+                                                       self.description,
+                                                       hive_settings=None,
+                                                       verbose=self.hue_sys.verbose))
         d_future = {}
         lst_result = [None] * len(sqls)
         i = 0
@@ -128,31 +129,27 @@ class hue:
                         del d_future[notebook]
                 except Exception as e:
                     self.hue_sys.log.warning(e)
+                    sql = sqls[idx]
                     self.hue_sys.log.warning(
                         f"due to fetch_result exception above, "
                         f"result of the following sql is truncated: "
-                        f"{sqls[idx][: MAX_LEN_PRINT_SQL] + '...' if len(sqls[idx]) > MAX_LEN_PRINT_SQL else sqls[idx]}")
+                        f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}")
 
             while i < len(sqls) and len(d_future) < n_jobs:
-                for worker in self.notebook_workers:
-                    if i >= len(sqls) or len(d_future) >= n_jobs:
-                        break
-
-                    if worker in d_future:
-                        continue
-                    try:
-                        worker.execute(sqls[i],
-                                       database=database,
-                                       sync=False)
-                        d_future[worker] = i
-                    except Exception as e:
-                        self.hue_sys.log.warning(e)
-                        self.hue_sys.log.warning(
-                            f"due to execute exception above, "
-                            f"result of the following sql is truncated: "
-                            f"{sqls[i][: MAX_LEN_PRINT_SQL] + '...' if len(sqls[i]) > MAX_LEN_PRINT_SQL else sqls[i]}")
-                    finally:
-                        i += 1
+                worker = self.notebook_workers[i]
+                try:
+                    worker.execute(sqls[i],
+                                   database=database,
+                                   sync=False)
+                    d_future[worker] = i
+                except Exception as e:
+                    self.hue_sys.log.warning(e)
+                    self.hue_sys.log.warning(
+                        f"due to execute exception above, "
+                        f"result of the following sql is truncated: "
+                        f"{sqls[i][: MAX_LEN_PRINT_SQL] + '...' if len(sqls[i]) > MAX_LEN_PRINT_SQL else sqls[i]}")
+                finally:
+                    i += 1
 
             time.sleep(wait_sec)
 
