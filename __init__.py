@@ -63,6 +63,7 @@ class hue:
                          sql: str,
                          database: str = "default",
                          sync=True,
+                         print_log: bool = False,
                          new_notebook=False):
         """
             sql 查询语句
@@ -77,7 +78,7 @@ class hue:
         else:
             nb = self.hue_sys
 
-        return nb.execute(sql, database, sync)
+        return nb.execute(sql, database, print_log, sync)
 
     def run_sqls(self, sql_path, workers=3):
         """
