@@ -28,6 +28,7 @@ def ensure_active_session(func):
         if time.perf_counter() - self.session["last_used"] >= 600.:
             logger = logging.getLogger(func.__name__)
             logger.warning(f"notebook session expired while calling {func.__name__}")
+            self.session["last_used"] = time.perf_counter()
             self._set_hive(self.hive_settings)
 
         return func(self, *args, **kwargs)
