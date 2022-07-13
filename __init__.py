@@ -117,6 +117,7 @@ class hue:
                                          .new_notebook(self.name + f"-worker-{len(self.notebook_workers)}",
                                                        self.description,
                                                        hive_settings=None,
+                                                       recreate_session=False,
                                                        verbose=self.hue_sys.verbose))
         d_future = {}
         lst_result = [None] * len(sqls)

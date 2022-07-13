@@ -25,10 +25,10 @@ def ensure_login(func):
 def ensure_active_session(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if time.perf_counter() - self._session_time >= 600.:
+        if time.perf_counter() - self.session["last_used"] >= 600.:
             logger = logging.getLogger(func.__name__)
             logger.warning(f"notebook session expired while calling {func.__name__}")
-            self._prepare_notebook()
+            self._set_hive(self.hive_settings)
 
         return func(self, *args, **kwargs)
 

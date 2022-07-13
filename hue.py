@@ -385,8 +385,7 @@ class Notebook(requests.Session):
         self.log.debug(f"create session response: {r.text}")
         r_json = r.json()
         self.session = r_json["session"]
-
-        self._session_time = time.perf_counter()
+        self.session["last_used"] = time.perf_counter()
         return r
 
     def _set_hive(self, hive_settings):
@@ -513,7 +512,7 @@ class Notebook(requests.Session):
                               "snippet": json.dumps(self.snippet)},
                         )
 
-        self._session_time = time.perf_counter()
+        self.session["last_used"] = time.perf_counter()
         return res
 
     def set_priority(self, priority: str):
@@ -615,9 +614,14 @@ class Notebook(requests.Session):
         new_nb._set_log(name=name, verbose=verbose)
         new_nb._password = self._password
 
-        new_nb._prepare_notebook(name, description,
-                                 hive_settings=hive_settings,
-                                 recreate_session=recreate_session)
+        if recreate_session:
+            new_nb._prepare_notebook(name, description,
+                                     hive_settings=hive_settings,
+                                     recreate_session=True)
+        else:
+            new_nb._create_notebook(name, description)
+            new_nb.notebook["sessions"] = [self.session]
+            new_nb.session = self.session
         return new_nb
 
     @retry()
@@ -719,7 +723,7 @@ class NotebookResult(object):
 
         status = r_json["query_status"]["status"]
         if status == "running":
-            self._notebook._session_time = time.perf_counter()
+            self._notebook.session["last_used"] = time.perf_counter()
         elif status != "available":
             self.log.warning(f"query {status}")
 
