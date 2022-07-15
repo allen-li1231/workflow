@@ -465,6 +465,7 @@ class Notebook(requests.Session):
                 "wasBatchExecuted": False
                 }
 
+    @ensure_active_session
     def execute(self,
                 sql: str,
                 database: str = "default",
@@ -499,7 +500,6 @@ class Notebook(requests.Session):
             self.cancel_statement()
 
     @retry()
-    @ensure_active_session
     @ensure_login
     def _execute(self, sql: str):
         sql_print = sql[: MAX_LEN_PRINT_SQL] + "..." \
