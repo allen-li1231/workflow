@@ -110,7 +110,7 @@ class hue:
     def run_notebook_sqls(self,
                           sqls,
                           database="default",
-                          n_jobs=3,
+                          n_jobs=2,
                           wait_sec=3):
         while len(self.notebook_workers) < len(sqls):
             self.notebook_workers.append(self.hue_sys

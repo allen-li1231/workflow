@@ -466,6 +466,7 @@ class Notebook(requests.Session):
                 }
 
     @ensure_active_session
+    @ensure_login
     def execute(self,
                 sql: str,
                 database: str = "default",
@@ -500,7 +501,6 @@ class Notebook(requests.Session):
             self.cancel_statement()
 
     @retry()
-    @ensure_login
     def _execute(self, sql: str):
         sql_print = sql[: MAX_LEN_PRINT_SQL] + "..." \
             if len(sql) > MAX_LEN_PRINT_SQL \
