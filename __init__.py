@@ -10,7 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
-from .hue import Notebook, Beeswax, MAX_LEN_PRINT_SQL, PERFORMANCE_SETTINGS
+from .hue import Notebook, Beeswax
+from .settings import MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS
 from .hue_download import Hue_download
 
 __all__ = ["hue", "Notebook", "Hue_download"]
@@ -19,7 +20,7 @@ __all__ = ["hue", "Notebook", "Hue_download"]
 class hue:
     def __init__(self, username: str, password: str,
                  name="", description="",
-                 hive_settings=PERFORMANCE_SETTINGS,
+                 hive_settings=HIVE_PERFORMANCE_SETTINGS,
                  verbose=False):
 
         # global hue_sys, download

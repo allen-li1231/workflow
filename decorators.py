@@ -2,6 +2,7 @@ import logging
 import time
 import requests
 from functools import wraps
+from .settings import HIVE_PERFORMANCE_SETTINGS, TEZ_SESSION_TIMEOUT_SECS
 
 
 def ensure_login(func):
@@ -25,7 +26,9 @@ def ensure_login(func):
 def ensure_active_session(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if time.perf_counter() - self.session["last_used"] >= 600.:
+        if "hive.execution.engine" in HIVE_PERFORMANCE_SETTINGS \
+                and HIVE_PERFORMANCE_SETTINGS["hive.execution.engine"] == "tez" \
+                and time.perf_counter() - self.session["last_used"] >= TEZ_SESSION_TIMEOUT_SECS:
             logger = logging.getLogger(func.__name__)
             logger.warning(f"notebook session expired while calling {func.__name__}")
             self.session["last_used"] = time.perf_counter()

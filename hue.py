@@ -13,30 +13,10 @@ from unicodedata import normalize
 import requests
 
 from . import logger
+from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS
 from .decorators import retry, ensure_login, ensure_active_session
 
 __all__ = ["Notebook", "Beeswax"]
-
-BASE_URL = "http://10.19.185.29:8889"
-
-MAX_LEN_PRINT_SQL = 100
-
-PERFORMANCE_SETTINGS = {
-    "hive.vectorized.execution.reduce.enabled": "true",
-    "hive.exec.parallel.thread": "true",
-    "hive.exec.dynamic.partition.mode": "nonstrict",
-    "hive.exec.compress.output": "true",
-    "hive.exec.compress.intermediate": "true",
-    "hive.intermediate.compression.codec": "org.apache.hadoop.io.compress.SnappyCodec",
-    "hive.intermediate.compression.type": "BLOCK",
-    "hive.optimize.skewjoin": "true",
-    "hive.ignore.mapjoin.hint": "false",
-
-    # refer to: "Hive Understanding concurrent sessions queue allocation"
-    "tez.queue.name": "root.fengkong",
-    "hive.tez.auto.reducer.parallelism": "true",
-    "hive.execution.engine": "tez",
-}
 
 
 class Beeswax(requests.Session):
@@ -44,7 +24,7 @@ class Beeswax(requests.Session):
                  username: str = None,
                  password: str = None,
                  base_url: str = None,
-                 hive_settings=PERFORMANCE_SETTINGS,
+                 hive_settings=HIVE_PERFORMANCE_SETTINGS,
                  verbose: bool = False):
 
         self.hive_settings = hive_settings
@@ -53,7 +33,7 @@ class Beeswax(requests.Session):
         self._set_log(name="Beeswax", verbose=verbose)
 
         if base_url is None:
-            self.base_url = BASE_URL
+            self.base_url = HUE_BASE_URL
         else:
             self.base_url = base_url
 
@@ -233,7 +213,7 @@ class Notebook(requests.Session):
                  name: str = "",
                  description: str = "",
                  base_url: str = None,
-                 hive_settings=PERFORMANCE_SETTINGS,
+                 hive_settings=HIVE_PERFORMANCE_SETTINGS,
                  verbose: bool = False):
 
         self.name = name
@@ -244,7 +224,7 @@ class Notebook(requests.Session):
         self._set_log(name=name, verbose=verbose)
 
         if base_url is None:
-            self.base_url = BASE_URL
+            self.base_url = HUE_BASE_URL
         else:
             self.base_url = base_url
 
@@ -312,6 +292,7 @@ class Notebook(requests.Session):
                 or f"var LOGGED_USERNAME = '';" in res.text:
             self.log.exception('login failed for [%s] at %s'
                                % (self.username, self.base_url))
+            self._password = None
         else:
             self.log.info('login succeeful [%s] at %s'
                           % (self.username, self.base_url))
@@ -399,7 +380,7 @@ class Notebook(requests.Session):
     def _prepare_notebook(self,
                           name="",
                           description="",
-                          hive_settings=PERFORMANCE_SETTINGS,
+                          hive_settings=HIVE_PERFORMANCE_SETTINGS,
                           recreate_session=False):
 
         self.log.debug(f"preparing notebook[{name}]")
@@ -465,8 +446,8 @@ class Notebook(requests.Session):
                 "wasBatchExecuted": False
                 }
 
-    @ensure_active_session
     @ensure_login
+    @ensure_active_session
     def execute(self,
                 sql: str,
                 database: str = "default",
@@ -499,6 +480,7 @@ class Notebook(requests.Session):
             return self._result
         except KeyboardInterrupt:
             self.cancel_statement()
+            raise KeyboardInterrupt
 
     @retry()
     def _execute(self, sql: str):
@@ -524,7 +506,7 @@ class Notebook(requests.Session):
         """
         self.execute(f"SET mapreduce.job.priority={priority.upper()}")
 
-    def recreate_session(self, hive_settings=PERFORMANCE_SETTINGS):
+    def recreate_session(self, hive_settings=None):
         if not hasattr(self, "session"):
             self._create_session()
 
@@ -597,7 +579,7 @@ class Notebook(requests.Session):
 
     def new_notebook(self,
                      name="", description="",
-                     hive_settings=PERFORMANCE_SETTINGS,
+                     hive_settings=HIVE_PERFORMANCE_SETTINGS,
                      recreate_session=False,
                      verbose: bool = None):
         new_nb = copy.deepcopy(self)
