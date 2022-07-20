@@ -200,8 +200,8 @@ class Notebook(requests.Session):
         name of Hue notebook
     description: str, default ""
         description of Hue notebook
-    hive_settings: dict, default PERFORMANT_SETTINGS
-        if you insist hive default settings, set this parameter to None
+    hive_settings: dict, default PERFORMANT_SETTINGS in settings
+        if you insist on hive default settings, set this parameter to {}
         if not provided, notebook would use PERFORMANT_SETTINGS
     verbose: bool, default False
         whether to print log on stdout, default False
@@ -213,7 +213,7 @@ class Notebook(requests.Session):
                  name: str = "",
                  description: str = "",
                  base_url: str = None,
-                 hive_settings=HIVE_PERFORMANCE_SETTINGS,
+                 hive_settings=None,
                  verbose: bool = False):
 
         self.name = name
@@ -370,17 +370,23 @@ class Notebook(requests.Session):
         return r
 
     def _set_hive(self, hive_settings):
-        if hive_settings is not None:
-            self.log.debug("setting up hive job")
-            for key, val in hive_settings.items():
-                self.execute(f"SET {key}={val};")
-                if "hive.execution.engine" == key:
-                    self.execute(f"SET hive.execution.engine={val};")
+        self.log.debug("setting up hive job")
+        if hive_settings is not None and not isinstance(hive_settings, dict):
+            raise TypeError("hive_settings should be None or instance of dict")
+
+        if hive_settings is None:
+            self.hive_settings = HIVE_PERFORMANCE_SETTINGS
+        else:
+            self.hive_settings = hive_settings
+
+        if hasattr(self, "snippet"):
+            self.snippet["properties"]["settings"] = \
+                [{"key": k, "value": v} for k, v in self.hive_settings.items()]
 
     def _prepare_notebook(self,
                           name="",
                           description="",
-                          hive_settings=HIVE_PERFORMANCE_SETTINGS,
+                          hive_settings=None,
                           recreate_session=False):
 
         self.log.debug(f"preparing notebook[{name}]")
@@ -390,8 +396,7 @@ class Notebook(requests.Session):
             self.recreate_session(hive_settings)
         else:
             self._create_session()
-
-        self._set_hive(hive_settings)
+            self._set_hive(hive_settings)
 
     def _prepare_snippet(self, sql: str = "", database="default"):
         self.log.debug("preparing snippet")
@@ -421,7 +426,7 @@ class Notebook(requests.Session):
                 "statementPath": "",
                 "associatedDocumentUuid": None,
                 "properties": {
-                    "settings": [],
+                    "settings": [{"key": k, "value": v} for k, v in self.hive_settings.items()],
                     "files": [],
                     "functions": [],
                     "arguments": []},
@@ -579,7 +584,7 @@ class Notebook(requests.Session):
 
     def new_notebook(self,
                      name="", description="",
-                     hive_settings=HIVE_PERFORMANCE_SETTINGS,
+                     hive_settings=None,
                      recreate_session=False,
                      verbose: bool = None):
         new_nb = copy.deepcopy(self)
@@ -604,6 +609,8 @@ class Notebook(requests.Session):
             new_nb._create_notebook(name, description)
             new_nb.notebook["sessions"] = [self.session]
             new_nb.session = self.session
+            new_nb._set_hive(hive_settings)
+
         return new_nb
 
     @retry()
