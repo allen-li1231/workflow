@@ -509,7 +509,9 @@ class Notebook(requests.Session):
         :param priority: one of "VERY_HIGH", "HIGH", "NORMAL", "LOW", "VERY_LOW",
             case insensitive
         """
-        self.execute(f"SET mapreduce.job.priority={priority.upper()}")
+
+        self.hive_settings["mapreduce.job.priority"] = priority.upper()
+        self._set_hive(self.hive_settings)
 
     def recreate_session(self, hive_settings=None):
         if not hasattr(self, "session"):
