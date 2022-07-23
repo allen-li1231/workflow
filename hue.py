@@ -513,6 +513,21 @@ class Notebook(requests.Session):
         self.hive_settings["mapreduce.job.priority"] = priority.upper()
         self._set_hive(self.hive_settings)
 
+    def set_engine(self, engine: str):
+        """
+        Set the priority for Hive Query
+
+        :param engine: one of "mr", "tez", spark",
+            case insensitive
+        """
+
+        self.hive_settings["hive.execution.engine"] = engine.lower()
+        self._set_hive(self.hive_settings)
+
+    def set_hive(self, key, val):
+        self.hive_settings[key] = val
+        self._set_hive(self.hive_settings)
+
     def recreate_session(self, hive_settings=None):
         if not hasattr(self, "session"):
             self._create_session()
