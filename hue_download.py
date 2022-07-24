@@ -10,72 +10,109 @@ import pandas as pd
 import requests
 from PIL import Image
 from requests_toolbelt import MultipartEncoder
+import logging
 
 from .settings import HUE_DOWNLOAD_BASE_URL
+from .decorators import retry
+from . import logger
 
 
-class Hue_download(requests.Session):
-    HEADER = {
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/json",
-        "Referer": "http://10.19.185.103:8015/login?redirect=%2Fdashboard",
-        "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/76.0.3809.100 Safari/537.36"
-    }
+class HueDownload(requests.Session):
 
-    def __init__(self, base_url=None, header=None):
-        if base_url is None:
-            self.base_url = HUE_DOWNLOAD_BASE_URL
-        else:
-            self.base_url = base_url
-        if header is None:
-            self.header = self.HEADER
-        else:
-            self.header = header
+    def __init__(self,
+                 username: str = None,
+                 password: str = None,
+                 verbose: bool = False):
+        self.base_url = HUE_DOWNLOAD_BASE_URL
+
+        self.username = username
+        self._password = password
+        self.verbose = verbose
+        self._set_log(verbose)
+
+        self.log.debug("loading img_dict")
         self.benchmark_imgs = np.load(r"W:\Python3\Lib\site-packages\wx_custom\img_dict.npy", allow_pickle=True).item()
-        super(Hue_download, self).__init__()
+        super(HueDownload, self).__init__()
+
+        self.headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+            "Referer": "http://10.19.185.103:8015/login?redirect=%2Fdashboard",
+            "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/76.0.3809.100 Safari/537.36"
+        }
+
+        self.login(self.username, self._password)
+
+    def _set_log(self, verbose):
+        self.log = logging.getLogger(__name__ + f".HueDownload")
+        has_stream_handler = False
+        for handler in self.log.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                has_stream_handler = True
+                if verbose:
+                    handler.setLevel(logging.INFO)
+                else:
+                    handler.setLevel(logging.WARNING)
+
+        if not has_stream_handler:
+            if verbose:
+                logger.setup_stdout_level(self.log, logging.INFO)
+            else:
+                logger.setup_stdout_level(self.log, logging.WARNING)
+
+    @retry()
+    def _login(self, username, password):
+        login_url = self.base_url + "/auth/login"
+        self.id_answer()
+        form_data = dict(username=username,
+                         password=password,
+                         code=self.code,
+                         uuid=self.uuid)
+
+        res = self.post(login_url,
+                        data=json.dumps(form_data))
+        r = res.json()
+        if "status" in r.keys():
+            if r["status"] == 400 and r["message"] == "验证码错误":
+                raise ConnectionError("captcha guess failed")
+
+            self.log.exception(res.text)
+            raise RuntimeError(r["message"])
+
+        return r
 
     def login(self, username=None, password=None):
-        if username is None:
-            username = self.username
-        if password is None:
-            password = self.password
-        self.header["Content-Type"] = "application/json"
-        login_url = self.base_url + "/auth/login"
-        try_cnt = 1
-        while try_cnt < 3:
-            try_cnt += 1
-            self.id_answer()
-            form_data = dict(username=username,
-                             password=password,
-                             code=self.code,
-                             uuid=self.uuid)
+        self.is_logged_in = False
+        self.username = username or self.username
+        self._password = password or self._password
+        if self.username is None and self._password is None:
+            raise ValueError("please provide username and password")
 
-            r = self.post(login_url,
-                          data=json.dumps(form_data),
-                          headers=self.header)
-            r = r.json()
-            if "status" in r.keys():
-                if r["status"] == 400:
-                    if r["message"] == "验证码错误":
-                        print("验证码错误，继续尝试请按1")
-                        time.sleep(3)
-                    else:
-                        print(r["message"])
-                        try_cnt = 3
-            try:
-                self.header["Authorization"] = "Bearer " + r["token"]
-                print("login succeeded for user [%s] at %s\n" %
-                      (username, self.base_url))
-                return "success"
-            except Exception as e:
-                print(e)
-                try_cnt = 3
+        if self.username is None and self._password is not None:
+            raise KeyError("username must be specified with password")
+
+        if self.username is not None and self._password is None:
+            print("Please provide Hue password:", end='')
+            self._password = input("")
+
+        self.log.debug(f"logging in for user [{self.username}]")
+        r = self._login(self.username, self._password)
+
+        if r.status_code != 200 \
+                or f"var LOGGED_USERNAME = '';" in r.text:
+            self.log.exception('login failed for [%s] at %s'
+                               % (self.username, self.base_url))
+        else:
+            self.log.info('login succeeful [%s] at %s'
+                          % (self.username, self.base_url))
+            self.is_logged_in = True
+            self.headers["Authorization"] = "Bearer " + r["token"]
 
     def get_column(self, table_name):
         url = self.base_url + "/api/hive/getColumns?tableName=" + table_name
-        r = requests.get(url, headers=self.header)
+        r = requests.get(url)
         columns = pd.DataFrame(r.json())["name"].to_list()
         return columns
 
@@ -86,15 +123,15 @@ class Hue_download(requests.Session):
             uploadColumnsInfo 选填，默认写1，可用作备注，与上传数据无关
             uploadEncryptColumns 选填，默认"",需要加密的列，多个用逗号隔开
         """
-        self.header["Referer"] = "http://10.19.185.103:8015/ud/uploadInfo"
+        self.headers["Referer"] = "http://10.19.185.103:8015/ud/uploadInfo"
         file = (file_path, open(file_path, "rb"))
         upload_info = {}
         upload_info["reason"] = reason
         upload_info["uploadColumnsInfo"] = uploadColumnsInfo
         upload_info["uploadEncryptColumns"] = uploadEncryptColumns  # 解密列
 
-        if "Authorization" not in self.header.keys():
-            self.login(self.username, self.password)
+        if "Authorization" not in self.headers.keys():
+            self.login(self.username, self._password)
         url = self.base_url + "/api/uploadInfo/upload"
         if re.findall("\.csv$", file_path):
             upload_data = pd.read_csv(file_path)
@@ -108,9 +145,9 @@ class Hue_download(requests.Session):
         upload_info["file"] = file
 
         data = MultipartEncoder(fields=upload_info)
-        self.header["Content-Type"] = data.content_type
+        self.headers["Content-Type"] = data.content_type
 
-        r = requests.post(url, data=data, headers=self.header)
+        r = requests.post(url, data=data)
         r = r.json()
 
         t_sec = 30
@@ -121,7 +158,7 @@ class Hue_download(requests.Session):
         for i in range(t_try):
             print("waiting %3d/%d..." %
                   (t_sec * i, t_tol))
-            r = requests.get(self.base_url + "/api/uploadInfo?page=0&size=10&sort=id,desc", headers=self.header)
+            r = requests.get(self.base_url + "/api/uploadInfo?page=0&size=10&sort=id,desc")
             task_list = r.json()["content"]
             for task in task_list:
                 if task["id"] == job_id and task["status"] == 3:
@@ -144,11 +181,11 @@ class Hue_download(requests.Session):
         """
 
         download_info = {}
-        self.header["Referer"] = "http://10.19.185.103:8015/ud/downloadInf"
-        self.header["Content-Type"] = "application/json"
+        self.headers["Referer"] = "http://10.19.185.103:8015/ud/downloadInf"
+        self.headers["Content-Type"] = "application/json"
 
-        if "Authorization" not in self.header.keys():
-            self.login(self.username, self.password)
+        if "Authorization" not in self.headers.keys():
+            self.login(self.username, self._password)
         url = self.base_url + "/api/downloadInfo"
 
         if columns is None:
@@ -192,7 +229,7 @@ class Hue_download(requests.Session):
             download_info["downloadDecryptionColumns"] = Decode_col
         download_info["columnsInfo"] = col_info
 
-        r = requests.post(url, data=json.dumps(download_info), headers=self.header)
+        r = requests.post(url, data=json.dumps(download_info))
         r = r.json()
         # print(r)
         if r["status"] != 0:
@@ -206,7 +243,7 @@ class Hue_download(requests.Session):
         for i in range(t_try):
             print("waiting %3d/%d..." %
                   (t_sec * i, t_tol) + "\r", end="")
-            r = requests.get(self.base_url + "/api/downloadInfo?page=0&size=10&sort=id,desc", headers=self.header)
+            r = requests.get(self.base_url + "/api/downloadInfo?page=0&size=10&sort=id,desc")
             task_list = r.json()["content"]
             for task in task_list:
                 if task["id"] == job_id and task["status"] == 3:
@@ -219,86 +256,73 @@ class Hue_download(requests.Session):
             csv_header = 0
         else:
             csv_header = 1
-        r = requests.get(self.base_url + "/api/downloadInfo/downloadData?id=" + str(job_id), headers=self.header)
+        r = requests.get(self.base_url + "/api/downloadInfo/downloadData?id=" + str(job_id))
         r = pd.read_csv(StringIO(r.text), header=csv_header)
         return r
 
     def base64_pil(self):
         self.img = base64.b64decode(self.img)
-        self.img = BytesIO(self.img)
-        self.img = Image.open(self.img).convert("L")
+        self.img = Image.open(BytesIO(self.img)).convert("L")
         self.img = np.array(self.img)
 
     def clear_edged(self, img):
         temp = np.sum(img, axis=0)
-        temp1 = np.sum(img, axis=1)
-        img = img[:, temp < len(temp1)]
+        # crop image, drop empty vertical pixels
+        img = img[:, temp < img.shape[0]]
         return img
 
     def compare_img(self, imga, imgb):
-        value = 1
+        # 1 means a complete mismatch, 0 means perfect match
+        score = 1.
         ax, ay = imga.shape
         bx, by = imgb.shape
-        cal_v = lambda x, y: len(x[x == 1]) / y
-        if ay == by:
-            temp = imga + imgb
-            value = cal_v(temp, ax * ay)
-        else:
-            for i in range(0, abs(ay - by) + 1):
-                if ay > by:
-                    temp = imga[:, i:by + i] + imgb
-                    t_value = cal_v(temp, bx * by)
-                    if t_value <= value:
-                        value = t_value
-                else:
-                    temp = imga + imgb[:, i:ay + i]
-                    t_value = cal_v(temp, ax * ay)
-                    if t_value <= value:
-                        value = t_value
-        return value
+
+        for i in range(0, abs(ay - by) + 1):
+            if ay >= by:
+                tmp_score = (imga[:, i:by + i] ^ imgb).sum() / (bx * by)
+            else:
+                tmp_score = (imga ^ imgb[:, i:ay + i]).sum() / (ax * ay)
+
+            if tmp_score < score:
+                score = tmp_score
+
+        return score
 
     def match_img(self, img):
-        value = 1
-        for i in self.benchmark_imgs.keys():
-            t_value = self.compare_img(img, self.benchmark_imgs[i])
-            if t_value < value:
-                value = t_value
+        score = 1
+        result = -1
+        for i, benchmark_img in self.benchmark_imgs.items():
+            tmp_score = self.compare_img(img, benchmark_img)
+            if tmp_score < score:
+                score = tmp_score
                 result = i
         return result
 
+    @retry()
     def get_img(self):
-        try:
-            code_url = self.base_url + "/auth/code"
-            code = self.get(code_url).json()
-            self.img = re.sub("data:image/png;base64,", "", code["img"]).replace("%0A", "\n")
-            self.uuid = code["uuid"]
-        except:
-            print("get image failed, waiting for 3 seconds")
-            time.sleep(3)
-            self.get_img()
+        code_url = self.base_url + "/auth/code"
+        code = self.get(code_url).json()
+        self.img = re.sub("data:image/png;base64,", "", code["img"]).replace("%0A", "\n")
+        self.uuid = code["uuid"]
 
     def id_answer(self):
         self.get_img()
-        try:
-            self.base64_pil()
-            self.img[self.img <= 180] = 0
-            self.img[self.img > 180] = 1
-            p1 = self.clear_edged(self.img[:, :24])
-            p2 = self.clear_edged(self.img[:, 25:50])
-            p3 = self.clear_edged(self.img[:, 51:70])
+        self.base64_pil()
+        self.img[self.img <= 180] = 0
+        self.img[self.img > 180] = 1
+        p1 = self.clear_edged(self.img[:, :24])
+        p2 = self.clear_edged(self.img[:, 25:50])
+        p3 = self.clear_edged(self.img[:, 51:70])
 
-            num1 = int(self.match_img(p1))
-            method = self.match_img(p2)
-            num2 = int(self.match_img(p3))
+        num1 = int(self.match_img(p1))
+        method = self.match_img(p2)
+        num2 = int(self.match_img(p3))
 
-            if method == "+":
-                answer = num1 + num2
-            elif method == "-":
-                answer = num1 - num2
-            elif method == "x":
-                answer = num1 * num2
-            self.code = answer
-        except:
-            self.get_img()
-            time.sleep(3)
-            self.id_answer()
+        if method == "+":
+            answer = num1 + num2
+        elif method == "-":
+            answer = num1 - num2
+        elif method == "x":
+            answer = num1 * num2
+
+        self.code = answer

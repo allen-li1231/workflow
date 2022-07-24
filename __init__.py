@@ -12,9 +12,10 @@ import numpy as np
 
 from .hue import Notebook, Beeswax
 from .settings import MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS
-from .hue_download import Hue_download
+from .hue_download import HueDownload
+from . import logger
 
-__all__ = ["hue", "Notebook", "Hue_download"]
+__all__ = ["hue", "Notebook", "HueDownload"]
 
 
 class hue:
@@ -38,12 +39,9 @@ class hue:
                                 hive_settings=hive_settings,
                                 verbose=verbose)
         self.beeswax = Beeswax()
-        self.download = Hue_download()
-        self.download.username = username
-        self.download.password = password
+        self.download = HueDownload(username, password, verbose)
         self.hue_sys.login(username, password)
         self.beeswax.login(username, password)
-        self.download.login()
 
         self.notebook_workers = [self.hue_sys]
 
