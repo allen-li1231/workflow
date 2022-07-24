@@ -126,9 +126,10 @@ class hue:
         while i < len(sqls) or len(d_future) > 0:
             for notebook, idx in list(d_future.items()):
                 try:
-                    if notebook._result.is_ready:
-                        lst_result[idx] = notebook._result
-                        del d_future[notebook]
+                    if not notebook._result.is_ready:
+                        continue
+
+                    lst_result[idx] = notebook._result
                 except Exception as e:
                     self.hue_sys.log.warning(e)
                     sql = sqls[idx]
@@ -136,6 +137,8 @@ class hue:
                         f"due to fetch_result exception above, "
                         f"result of the following sql is truncated: "
                         f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}")
+                finally:
+                    del d_future[notebook]
 
             while i < len(sqls) and len(d_future) < n_jobs:
                 worker = self.notebook_workers[i]

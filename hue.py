@@ -710,18 +710,27 @@ class NotebookResult(object):
                 logger.setup_stdout_level(self.log, logging.WARNING)
 
     @retry()
-    def check_status(self, suppress_info=False):
-        if not suppress_info:
-            self.log.info(f"checking status")
+    def _check_status(self):
         url = self.base_url + "/notebook/api/check_status"
         res = self._notebook.post(url,
                                   data={"notebook": json.dumps({"id": self.notebook["uuid"]})}
                                   )
-        self.log.debug(f"check status response: {res.text}")
+        self.log.debug(f"_check status response: {res.text}")
+        return res
+
+    def check_status(self, suppress_info=False):
+        if suppress_info:
+            self.log.debug(f"checking status")
+        else:
+            self.log.info(f"checking status")
+
+        res = self._check_status()
         r_json = res.json()
         if r_json["status"] != 0:
-            self.fetch_cloud_logs()
-            self.log.exception(self.full_log)
+            cloud_log = self.fetch_cloud_logs()
+            if len(cloud_log) > 0:
+                self.log.exception(cloud_log)
+
             if "message" in r_json:
                 raise RuntimeError(r_json["message"])
             else:
@@ -736,7 +745,7 @@ class NotebookResult(object):
         self.snippet["status"] = status
         return res
 
-    def await_result(self, attempts: int = float("inf"), wait_sec: int = 3, print_log=False):
+    def await_result(self, attempts: float = float("inf"), wait_sec: int = 3, print_log=False):
         try:
             i = 1
             start_time = time.perf_counter()
@@ -748,10 +757,11 @@ class NotebookResult(object):
                 self.log.debug(msg)
 
                 if print_log:
-                    self.check_status(suppress_info=True)
                     cloud_log = self.fetch_cloud_logs()
                     if len(cloud_log) > 0:
                         print(cloud_log)
+
+                    self.check_status(suppress_info=True)
                 else:
                     self.check_status()
 
@@ -822,10 +832,12 @@ class NotebookResult(object):
         return self.data
 
     def fetch_cloud_logs(self):
+        self.log.debug("fetching cloud logs")
         res = self._get_logs(self._logs_row, self.full_log)
         cloud_log = res.json()
         if "logs" not in cloud_log:
-            raise KeyError(f"Could not parse logs from cloud response: {res.text}")
+            self.log.warning(f"Could not parse logs from cloud response: {res.text}")
+            return ''
 
         cloud_log = cloud_log["logs"]
         if len(cloud_log) > 0:
