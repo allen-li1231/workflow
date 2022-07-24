@@ -11,10 +11,10 @@ import requests
 from PIL import Image
 from requests_toolbelt import MultipartEncoder
 
+from .settings import HUE_DOWNLOAD_BASE_URL
+
 
 class Hue_download(requests.Session):
-    BASE_URL = "http://10.19.185.103:8000"
-
     HEADER = {
         "Accept": "application/json, text/plain, */*",
         "Content-Type": "application/json",
@@ -26,7 +26,7 @@ class Hue_download(requests.Session):
 
     def __init__(self, base_url=None, header=None):
         if base_url is None:
-            self.base_url = self.BASE_URL
+            self.base_url = HUE_DOWNLOAD_BASE_URL
         else:
             self.base_url = base_url
         if header is None:
