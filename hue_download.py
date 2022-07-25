@@ -100,15 +100,10 @@ class HueDownload(requests.Session):
         self.log.debug(f"logging in for user [{self.username}]")
         r = self._login(self.username, self._password)
 
-        if r.status_code != 200 \
-                or f"var LOGGED_USERNAME = '';" in r.text:
-            self.log.exception('login failed for [%s] at %s'
-                               % (self.username, self.base_url))
-        else:
-            self.log.info('login succeeful [%s] at %s'
-                          % (self.username, self.base_url))
-            self.is_logged_in = True
-            self.headers["Authorization"] = "Bearer " + r["token"]
+        self.log.info('login succeeful [%s] at %s'
+                      % (self.username, self.base_url))
+        self.is_logged_in = True
+        self.headers["Authorization"] = "Bearer " + r["token"]
 
     def get_column(self, table_name):
         url = self.base_url + "/api/hive/getColumns?tableName=" + table_name

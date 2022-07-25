@@ -532,10 +532,17 @@ class Notebook(requests.Session):
         if not hasattr(self, "session"):
             self._create_session()
 
-        self._close_session()
-        self._create_session()
+        r_json = self._close_session().json()
+        if r_json["status"] == 1:
+            closed_session_id = ""
+        else:
+            closed_session_id = r_json["session"]["session"]["id"]
+
+        r_json = self._create_session().json()
+        new_session_id = r_json["session"]["id"]
         self.notebook["sessions"] = [self.session]
         self._set_hive(hive_settings)
+        return closed_session_id, new_session_id
 
     @retry()
     @ensure_login

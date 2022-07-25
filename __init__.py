@@ -110,7 +110,8 @@ class hue:
                           sqls,
                           database="default",
                           n_jobs=3,
-                          wait_sec=3):
+                          wait_sec=3,
+                          sync=True):
         while len(self.notebook_workers) < len(sqls):
             self.notebook_workers.append(self.hue_sys
                                          .new_notebook(self.name + f"-worker-{len(self.notebook_workers)}",
@@ -124,10 +125,11 @@ class hue:
         while i < len(sqls) or len(d_future) > 0:
             for notebook, idx in list(d_future.items()):
                 try:
-                    if not notebook._result.is_ready:
+                    if sync and not notebook._result.is_ready:
                         continue
 
                     lst_result[idx] = notebook._result
+                    del d_future[notebook]
                 except Exception as e:
                     self.hue_sys.log.warning(e)
                     sql = sqls[idx]
@@ -135,10 +137,9 @@ class hue:
                         f"due to fetch_result exception above, "
                         f"result of the following sql is truncated: "
                         f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}")
-                finally:
                     del d_future[notebook]
 
-            while i < len(sqls) and len(d_future) < n_jobs:
+            while i < len(sqls) and (len(d_future) < n_jobs or not sync):
                 worker = self.notebook_workers[i]
                 try:
                     worker.execute(sqls[i],
