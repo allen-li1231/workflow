@@ -112,6 +112,18 @@ class hue:
                           n_jobs=3,
                           wait_sec=3,
                           sync=True):
+        """
+        run concurrent hiveql using Hue Notebook api.
+
+        :param sqls: iterable of sql strings
+        :param database: string, default "default", database name
+        :param n_jobs: number of concurrent queries to run, recommend not greater than 3,
+                       otherwise it would sometimes causes "Too many opened sessions" error
+        :param wait_sec: wait seconds between each submission of query
+        :param sync: whether to wait for all queries to complete
+        :return: list of NotebookResults
+        """
+
         while len(self.notebook_workers) < len(sqls):
             self.notebook_workers.append(self.hue_sys
                                          .new_notebook(self.name + f"-worker-{len(self.notebook_workers)}",
