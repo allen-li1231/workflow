@@ -107,7 +107,7 @@ class HueDownload(requests.Session):
 
     def get_column(self, table_name):
         url = self.base_url + '/api/hive/getColumns?tableName=' + table_name
-        r = requests.get(url, headers=self.header)
+        r = requests.get(url, headers=self.headers)
         columns = pd.DataFrame(r.json())['name'].to_list()
         return columns
 
@@ -152,7 +152,7 @@ class HueDownload(requests.Session):
         for i in range(t_try):
             print('waiting %3d/%d...' %
                   (t_sec * i, t_tol))
-            r = requests.get(self.base_url + '/api/uploadInfo?page=0&size=10&sort=id,desc', headers=self.header)
+            r = requests.get(self.base_url + '/api/uploadInfo?page=0&size=10&sort=id,desc', headers=self.headers)
             task_list = r.json()['content']
             for task in task_list:
                 if task['id'] == job_id and task['status'] == 3:
@@ -223,7 +223,7 @@ class HueDownload(requests.Session):
             download_info['downloadDecryptionColumns'] = Decode_col
         download_info['columnsInfo'] = col_info
 
-        r = requests.post(url, data=json.dumps(download_info), headers=self.header)
+        r = requests.post(url, data=json.dumps(download_info), headers=self.headers)
         r = r.json()
         # print(r)
         if r['status'] != 0:
@@ -237,7 +237,7 @@ class HueDownload(requests.Session):
         for i in range(t_try):
             print('waiting %3d/%d...' %
                   (t_sec * i, t_tol) + '\r', end='')
-            r = requests.get(self.base_url + '/api/downloadInfo?page=0&size=10&sort=id,desc', headers=self.header)
+            r = requests.get(self.base_url + '/api/downloadInfo?page=0&size=10&sort=id,desc', headers=self.headers)
             task_list = r.json()['content']
             for task in task_list:
                 if task['id'] == job_id and task['status'] == 3:
@@ -250,7 +250,7 @@ class HueDownload(requests.Session):
             csv_header = 0
         else:
             csv_header = 1
-        r = requests.get(self.base_url + '/api/downloadInfo/downloadData?id=' + str(job_id), headers=self.header)
+        r = requests.get(self.base_url + '/api/downloadInfo/downloadData?id=' + str(job_id), headers=self.headers)
         r = pd.read_csv(StringIO(r.text), header=csv_header)
         return r
 
