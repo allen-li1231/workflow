@@ -254,9 +254,31 @@ class HueDownload(requests.Session):
         r = pd.read_csv(StringIO(r.text), header=csv_header)
         return r
 
-    def kill_app(self, app_id: str):
+    def kill_app(self, app_id):
+        """
+        kill a YARN application
+
+        :param app_id: str or string iterable
+        :return: server response context
+        """
+
+        if isinstance(app_id, str):
+            res = self._kill_app(app_id)
+            r_json = res.json()
+            if r_json["status"] != 1:
+                raise RuntimeError(res.text)
+
+        # let it fail if app_id is not iterable
+        for app in app_id:
+            res = self._kill_app(app)
+            r_json = res.json()
+            if r_json["status"] != 1:
+                raise RuntimeError(res.text)
+
+    @retry()
+    def _kill_app(self, app_id: str):
         url = self.base_url + '/api/killJobHist'
-        res = self.post(url, data={
+        res = self.post(url, data=json.dumps({
             "appId": app_id,
             "createTime": "",
             "id": "",
@@ -264,12 +286,9 @@ class HueDownload(requests.Session):
             "reason": "",
             "status": "",
             "username": ""
-        })
-        r_json = res.json()
-        if r_json["status"] != 1:
-            raise RuntimeError(res.text)
-
-        return r_json
+        }))
+        self.log.debug(f"_kill_app responds: {res.text}")
+        return res
 
     def base64_pil(self):
         self.img = base64.b64decode(self.img)

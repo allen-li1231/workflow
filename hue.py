@@ -2,6 +2,7 @@ import copy
 import gc
 import csv
 import json
+import re
 import logging
 import os
 import time
@@ -498,7 +499,7 @@ class Notebook(requests.Session):
                         data={"notebook": json.dumps(self.notebook),
                               "snippet": json.dumps(self.snippet)},
                         )
-
+        self.log.debug(f"_execute returns: {res.text}")
         self.session["last_used"] = time.perf_counter()
         return res
 
@@ -856,11 +857,7 @@ class NotebookResult(object):
     def app_id(self):
         # length of application id is always 32
         self.fetch_cloud_logs()
-        start_idx = self.full_log.index("application_")
-        if start_idx == -1:
-            raise LookupError("application id not found in cloud log")
-
-        return self.full_log[start_idx: start_idx + 32]
+        return re.findall(r"application_\d{13}_\d{6}", self.full_log)
 
     @retry()
     def _get_logs(self, start_row, full_log):

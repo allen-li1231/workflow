@@ -357,12 +357,11 @@ class hue:
     def table_detail(self, table_name, database):
         return self.beeswax.table_detail(table_name, database)
 
-    def kill_job(self, app_id):
+    def kill_app(self, app_id):
         return self.download.kill_app(app_id)
 
     def close(self):
         for worker in self.notebook_workers:
             worker.close()
 
-        self.hue_sys.close()
         self.hue_sys.logout()
