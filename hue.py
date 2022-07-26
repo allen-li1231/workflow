@@ -787,7 +787,6 @@ class NotebookResult(object):
         except KeyboardInterrupt:
             self._notebook.cancel_statement()
 
-    @property
     def is_ready(self):
         self.check_status()
         return self.snippet["status"] == "available"
@@ -852,6 +851,16 @@ class NotebookResult(object):
             self._logs_row += 1 + cloud_log.count("\n")
 
         return cloud_log
+
+    @property
+    def app_id(self):
+        # length of application id is always 32
+        self.fetch_cloud_logs()
+        start_idx = self.full_log.index("application_")
+        if start_idx == -1:
+            raise LookupError("application id not found in cloud log")
+
+        return self.full_log[start_idx: start_idx + 32]
 
     @retry()
     def _get_logs(self, start_row, full_log):

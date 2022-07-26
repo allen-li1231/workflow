@@ -34,13 +34,13 @@ class hue:
         self.hive_settings = hive_settings
         self.verbose = verbose
 
-        self.hue_sys = Notebook(name=name,
+        self.hue_sys = Notebook(username, password,
+                                name=name,
                                 description=description,
                                 hive_settings=hive_settings,
                                 verbose=verbose)
         self.beeswax = Beeswax()
         self.download = HueDownload(username, password, verbose)
-        self.hue_sys.login(username, password)
         self.beeswax.login(username, password)
 
         self.notebook_workers = [self.hue_sys]
@@ -137,7 +137,7 @@ class hue:
         while i < len(sqls) or len(d_future) > 0:
             for notebook, idx in list(d_future.items()):
                 try:
-                    if sync and not notebook._result.is_ready:
+                    if sync and not notebook._result.is_ready():
                         continue
 
                     lst_result[idx] = notebook._result
@@ -356,6 +356,9 @@ class hue:
 
     def table_detail(self, table_name, database):
         return self.beeswax.table_detail(table_name, database)
+
+    def kill_job(self, app_id):
+        return self.download.kill_app(app_id)
 
     def close(self):
         for worker in self.notebook_workers:

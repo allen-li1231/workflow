@@ -254,6 +254,23 @@ class HueDownload(requests.Session):
         r = pd.read_csv(StringIO(r.text), header=csv_header)
         return r
 
+    def kill_app(self, app_id: str):
+        url = self.base_url + '/api/killJobHist'
+        res = self.post(url, data={
+            "appId": app_id,
+            "createTime": "",
+            "id": "",
+            "ip": "",
+            "reason": "",
+            "status": "",
+            "username": ""
+        })
+        r_json = res.json()
+        if r_json["status"] != 1:
+            raise RuntimeError(res.text)
+
+        return r_json
+
     def base64_pil(self):
         self.img = base64.b64decode(self.img)
         self.img = Image.open(BytesIO(self.img)).convert("L")

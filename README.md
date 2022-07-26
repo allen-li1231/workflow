@@ -101,7 +101,7 @@ while not all(is_ready for is_ready in d_notebook.values()):
         if is_ready:
             continue
 
-        if notebook._result.is_ready:
+        if notebook._result.is_ready():
             # 对结果进行fetchall()等操作后...
             
             notebook.close()
