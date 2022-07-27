@@ -367,7 +367,6 @@ class Notebook(requests.Session):
         self.log.debug(f"create session response: {r.text}")
         r_json = r.json()
         self.session = r_json["session"]
-        self.session["last_used"] = time.perf_counter()
         return r
 
     def _set_hive(self, hive_settings):
@@ -453,7 +452,6 @@ class Notebook(requests.Session):
                 }
 
     @ensure_login
-    @ensure_active_session
     def execute(self,
                 sql: str,
                 database: str = "default",
@@ -500,7 +498,6 @@ class Notebook(requests.Session):
                               "snippet": json.dumps(self.snippet)},
                         )
         self.log.debug(f"_execute returns: {res.text}")
-        self.session["last_used"] = time.perf_counter()
         return res
 
     def set_priority(self, priority: str):
@@ -745,9 +742,7 @@ class NotebookResult(object):
                 raise RuntimeError(r_json)
 
         status = r_json["query_status"]["status"]
-        if status == "running":
-            self._notebook.session["last_used"] = time.perf_counter()
-        elif status != "available":
+        if status != "running" and status != "available":
             self.log.warning(f"query {status}")
 
         self.snippet["status"] = status

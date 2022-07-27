@@ -23,22 +23,6 @@ def ensure_login(func):
     return wrapper
 
 
-def ensure_active_session(func):
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        if "hive.execution.engine" in HIVE_PERFORMANCE_SETTINGS \
-                and HIVE_PERFORMANCE_SETTINGS["hive.execution.engine"] == "tez" \
-                and time.perf_counter() - self.session["last_used"] >= TEZ_SESSION_TIMEOUT_SECS:
-            logger = logging.getLogger(func.__name__)
-            logger.warning(f"notebook session expired while calling {func.__name__}")
-            self.session["last_used"] = time.perf_counter()
-            self._set_hive(self.hive_settings)
-
-        return func(self, *args, **kwargs)
-
-    return wrapper
-
-
 def retry(attempts: int = 3, wait_sec: int = 3):
     def retry_wrapper(func):
         @wraps(func)
