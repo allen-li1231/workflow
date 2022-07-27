@@ -483,10 +483,10 @@ class Notebook(requests.Session):
             if sync:
                 self._result.await_result(print_log=print_log)
 
-            return self._result
         except KeyboardInterrupt:
             self.cancel_statement()
-            raise KeyboardInterrupt
+        finally:
+            return self._result
 
     @retry()
     def _execute(self, sql: str):
