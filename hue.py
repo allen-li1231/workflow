@@ -843,7 +843,10 @@ class NotebookResult(object):
         res = self._get_logs(self._logs_row, self.full_log)
         cloud_log = res.json()
         if "logs" not in cloud_log:
-            self.log.warning(f"Could not parse logs from cloud response: {res.text}")
+            if "message" in cloud_log:
+                self.log.warning(f"fetching_cloud_logs responses: {cloud_log['message']}")
+            else:
+                self.log.warning(f"Could not parse logs from cloud response: {res.text}")
             return ''
 
         cloud_log = cloud_log["logs"]

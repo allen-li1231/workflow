@@ -267,13 +267,13 @@ class HueDownload(requests.Session):
             r_json = res.json()
             if r_json["status"] != 1:
                 raise RuntimeError(res.text)
-
-        # let it fail if app_id is not iterable
-        for app in app_id:
-            res = self._kill_app(app)
-            r_json = res.json()
-            if r_json["status"] != 1:
-                raise RuntimeError(res.text)
+        else:
+            # let it fail if app_id is not iterable
+            for app in app_id:
+                res = self._kill_app(app)
+                r_json = res.json()
+                if r_json["status"] != 1:
+                    raise RuntimeError(res.text)
 
     @retry()
     def _kill_app(self, app_id: str):
