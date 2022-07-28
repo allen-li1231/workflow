@@ -856,6 +856,9 @@ class NotebookResult(object):
 
     @property
     def app_id(self):
+        if self._logs_row == 0:
+            self.fetch_cloud_logs()
+
         # length of application id is always 3
         return re.findall(r"application_\d{13}_\d{6}", self.full_log)
 
