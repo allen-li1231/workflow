@@ -859,7 +859,7 @@ class NotebookResult(object):
         if self._logs_row == 0 and self.snippet["status"] != "running":
             self.fetch_cloud_logs()
 
-        # length of application id is always 3
+        # length of application id is always 32
         return re.findall(r"application_\d{13}_\d{6}", self.full_log)
 
     @retry()
