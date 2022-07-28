@@ -689,6 +689,7 @@ class NotebookResult(object):
         self.data = None
         self.full_log = ""
         self._logs_row = 0
+        self._app_id = []
 
         self._notebook = notebook
         # the proxy might fail to respond when the response body becomes too large
@@ -723,16 +724,23 @@ class NotebookResult(object):
         self.log.debug(f"_check status response: {res.text}")
         return res
 
-    def check_status(self, suppress_info=False):
-        if suppress_info:
+    def check_status(self, return_log=False):
+        if return_log:
             self.log.debug(f"checking status")
         else:
             self.log.info(f"checking status")
 
         res = self._check_status()
         r_json = res.json()
+
+        # download cloud log by default
+        cloud_log = self.fetch_cloud_logs()
+        # length of application id is always 3
+        _ = re.findall(r"application_\d{13}_\d{6}", cloud_log)
+        if len(_) > 0:
+            self._app_id.extend(_)
+
         if r_json["status"] != 0:
-            cloud_log = self.fetch_cloud_logs()
             if len(cloud_log) > 0:
                 self.log.exception(cloud_log)
 
@@ -746,9 +754,13 @@ class NotebookResult(object):
             self.log.warning(f"query {status}")
 
         self.snippet["status"] = status
-        return res
 
-    def await_result(self, attempts: float = float("inf"), wait_sec: int = 3, print_log=False):
+        if return_log:
+            return cloud_log
+
+        return status
+
+    def await_result(self, attempts: float = float("inf"), wait_sec: int = 1, print_log=False):
         try:
             i = 1
             start_time = time.perf_counter()
@@ -759,14 +771,9 @@ class NotebookResult(object):
                       + msg
                 self.log.debug(msg)
 
-                if print_log:
-                    cloud_log = self.fetch_cloud_logs()
-                    if len(cloud_log) > 0:
-                        print(cloud_log)
-
-                    self.check_status(suppress_info=True)
-                else:
-                    self.check_status()
+                cloud_log = self.check_status(return_log=print_log)
+                if print_log and len(cloud_log) > 0:
+                    print(cloud_log)
 
                 if self.snippet["status"] == "available":
                     self.log.info(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
@@ -853,9 +860,7 @@ class NotebookResult(object):
 
     @property
     def app_id(self):
-        # length of application id is always 32
-        self.fetch_cloud_logs()
-        return re.findall(r"application_\d{13}_\d{6}", self.full_log)
+        return self._app_id
 
     @retry()
     def _get_logs(self, start_row, full_log):
