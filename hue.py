@@ -856,7 +856,7 @@ class NotebookResult(object):
 
     @property
     def app_id(self):
-        if self._logs_row == 0:
+        if self._logs_row == 0 and self.snippet["status"] != "running":
             self.fetch_cloud_logs()
 
         # length of application id is always 3
