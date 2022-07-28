@@ -15,7 +15,7 @@ import requests
 
 from . import logger
 from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS
-from .decorators import retry, ensure_login, ensure_active_session
+from .decorators import retry, ensure_login
 
 __all__ = ["Notebook", "Beeswax"]
 
@@ -725,21 +725,17 @@ class NotebookResult(object):
         return res
 
     def check_status(self, return_log=False):
+        app_id = self.app_id
         if return_log:
-            self.log.debug(f"checking status")
+            self.log.debug(f"checking {'yarn app: ' + ', '.join(app_id) if len(app_id) else 'status'}")
         else:
-            self.log.info(f"checking status")
+            self.log.info(f"checking {'yarn app: ' + ', '.join(app_id) if len(app_id) else 'status'}")
 
         res = self._check_status()
         r_json = res.json()
 
         # download cloud log by default
         cloud_log = self.fetch_cloud_logs()
-        # length of application id is always 3
-        _ = re.findall(r"application_\d{13}_\d{6}", cloud_log)
-        if len(_) > 0:
-            self._app_id.extend(_)
-
         if r_json["status"] != 0:
             if len(cloud_log) > 0:
                 self.log.exception(cloud_log)
@@ -860,7 +856,8 @@ class NotebookResult(object):
 
     @property
     def app_id(self):
-        return self._app_id
+        # length of application id is always 3
+        return re.findall(r"application_\d{13}_\d{6}", self.full_log)
 
     @retry()
     def _get_logs(self, start_row, full_log):
