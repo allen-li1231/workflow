@@ -62,7 +62,7 @@ class HueDownload(requests.Session):
             else:
                 logger.setup_stdout_level(self.log, logging.WARNING)
 
-    @retry()
+    @retry(__name__)
     def _login(self, username, password):
         login_url = self.base_url + "/auth/login"
         self.id_answer()
@@ -73,15 +73,7 @@ class HueDownload(requests.Session):
 
         res = self.post(login_url,
                         data=json.dumps(form_data))
-        r = res.json()
-        if "status" in r.keys():
-            if r["status"] == 400 and r["message"] == "验证码错误":
-                raise ConnectionError("captcha guess failed")
-
-            self.log.exception(res.text)
-            raise RuntimeError(r["message"])
-
-        return r
+        return res
 
     def login(self, username=None, password=None):
         self.is_logged_in = False
@@ -98,16 +90,23 @@ class HueDownload(requests.Session):
             self._password = input("")
 
         self.log.debug(f"logging in for user [{self.username}]")
-        r = self._login(self.username, self._password)
+        res = self._login(self.username, self._password)
+        r_json = res.json()
+        if "status" in r_json.keys():
+            if r_json["status"] == 400 and r_json["message"] == "验证码错误":
+                raise ConnectionError("captcha guess failed")
+
+            self.log.exception(res.text)
+            raise RuntimeError(r_json["message"])
 
         self.log.info('login succeeful [%s] at %s'
                       % (self.username, self.base_url))
         self.is_logged_in = True
-        self.headers["Authorization"] = "Bearer " + r["token"]
+        self.headers["Authorization"] = "Bearer " + r_json["token"]
 
     def get_column(self, table_name):
         url = self.base_url + '/api/hive/getColumns?tableName=' + table_name
-        r = requests.get(url, headers=self.headers)
+        r = requests.get(url)
         columns = pd.DataFrame(r.json())['name'].to_list()
         return columns
 
@@ -141,7 +140,7 @@ class HueDownload(requests.Session):
         data = MultipartEncoder(fields=upload_info)
         self.headers['Content-Type'] = data.content_type
 
-        r = requests.post(url, data=data, headers=self.headers)
+        r = requests.post(url, data=data)
         r = r.json()
 
         t_sec = 30
@@ -152,7 +151,7 @@ class HueDownload(requests.Session):
         for i in range(t_try):
             print('waiting %3d/%d...' %
                   (t_sec * i, t_tol))
-            r = requests.get(self.base_url + '/api/uploadInfo?page=0&size=10&sort=id,desc', headers=self.headers)
+            r = requests.get(self.base_url + '/api/uploadInfo?page=0&size=10&sort=id,desc')
             task_list = r.json()['content']
             for task in task_list:
                 if task['id'] == job_id and task['status'] == 3:
@@ -175,7 +174,7 @@ class HueDownload(requests.Session):
         '''
 
         download_info = {}
-        self.headers['Referer'] = 'http://10.19.185.103:8015/ud/downloadInf'
+        self.headers['Referer'] = 'http://10.19.185.103:8015/ud/downloadInfo'
         self.headers['Content-Type'] = 'application/json'
 
         if 'Authorization' not in self.headers.keys():
@@ -223,7 +222,7 @@ class HueDownload(requests.Session):
             download_info['downloadDecryptionColumns'] = Decode_col
         download_info['columnsInfo'] = col_info
 
-        r = requests.post(url, data=json.dumps(download_info), headers=self.headers)
+        r = requests.post(url, data=json.dumps(download_info))
         r = r.json()
         # print(r)
         if r['status'] != 0:
@@ -237,7 +236,7 @@ class HueDownload(requests.Session):
         for i in range(t_try):
             print('waiting %3d/%d...' %
                   (t_sec * i, t_tol) + '\r', end='')
-            r = requests.get(self.base_url + '/api/downloadInfo?page=0&size=10&sort=id,desc', headers=self.headers)
+            r = requests.get(self.base_url + '/api/downloadInfo?page=0&size=10&sort=id,desc')
             task_list = r.json()['content']
             for task in task_list:
                 if task['id'] == job_id and task['status'] == 3:
@@ -250,9 +249,125 @@ class HueDownload(requests.Session):
             csv_header = 0
         else:
             csv_header = 1
-        r = requests.get(self.base_url + '/api/downloadInfo/downloadData?id=' + str(job_id), headers=self.headers)
+        r = requests.get(self.base_url + '/api/downloadInfo/downloadData?id=' + str(job_id))
         r = pd.read_csv(StringIO(r.text), header=csv_header)
         return r
+
+    def download(self,
+                 table: str,
+                 reason: str,
+                 columns: list = None,
+                 column_names: str = ' ',
+                 decrypt_columns: list = None,
+                 limit: int = None,
+                 path: str = None,
+                 wait_sec: int = 3,
+                 timeout: float = float("inf")):
+
+        res = self._download(
+            table=table, reason=reason,
+            columns=columns, column_names=column_names,
+            decrypt_columns=decrypt_columns, limit=str(limit))
+
+        r_json = res.json()
+
+        error_msg = f"cannot download {table}, please check table name and (decrypt) columns"
+        if r_json["status"] != 0:
+            self.log.exception(error_msg)
+            raise RuntimeError(error_msg)
+
+        download_id = r_json["id"]
+        start_time = time.perf_counter()
+        while time.perf_counter() - start_time < timeout:
+            time.sleep(wait_sec)
+            download_info = self.get_download_info(download_id)
+            if download_info["status"] == 0:
+                # status: submit
+                continue
+            if download_info["status"] == 1:
+                # status: failed
+                raise RuntimeError(error_msg)
+            if download_info["status"] == 3:
+                # status: success
+                ret = self.download_by_id(download_id=download_id, path=path)
+                return ret
+            else:
+                raise RuntimeError(f"can't resolve download info: {download_info}")
+
+        return TimeoutError(f"download {table} timed out")
+
+    def get_download_info(self, download_id: int, **kwargs):
+        res = self._get_download_info(**kwargs)
+        r_json = res.json()
+        for content in r_json["content"]:
+            if content["id"] == download_id:
+                return content
+
+        raise LookupError(f"cannot get info with download id: {download_id}")
+
+    def download_by_id(self, download_id, path: str = None):
+        start_time = time.perf_counter()
+        buffer = self._download_by_id(download_id)
+        if path is None:
+            df = pd.read_csv(StringIO(buffer))
+            self.log.info(f"download finished in {time.perf_counter() - start_time:.3f}")
+            return df
+
+        if path.rpartition(".")[2] != "csv":
+            path += ".csv"
+
+        with open(path, "wb") as f:
+            for chunk in buffer.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        self.log.info(f"download finished in {time.perf_counter() - start_time:.3f}")
+
+    @retry(__name__)
+    def _download(self,
+                  table: str,
+                  reason: str,
+                  columns: list = None,
+                  column_names: str = ' ',
+                  decrypt_columns: list = None,
+                  limit: str = None):
+
+        url = self.base_url + '/api/downloadInfo'
+        self.headers['Referer'] = 'http://10.19.185.103:8015/ud/downloadInfo'
+        self.headers['Content-Type'] = 'application/json'
+
+        res = requests.post(url, data=json.dumps({
+            "columnsInfo": column_names,
+            "downloadColumns": columns,
+            "downloadDecryptionColumns": decrypt_columns,
+            "downloadLimit": limit,
+            "downloadTable": table,
+            "reason": reason
+        }))
+        return res
+
+    @retry(__name__)
+    def _get_download_info(self,
+                           page=0,
+                           size=10,
+                           sort="id,desc"):
+
+        url = self.base_url + '/api/downloadInfo'
+        res = self.get(url, params={
+            "page": page,
+            "size": size,
+            "sort": sort
+        })
+        return res
+
+    @retry(__name__)
+    def _download_by_id(self, download_id: int):
+        url = self.base_url + '/api/downloadInfo/downloadData?id='
+        res = requests.get(
+            url,
+            params={"id": download_id},
+            stream=True
+        )
+        return res
 
     def kill_app(self, app_id):
         """
@@ -275,7 +390,7 @@ class HueDownload(requests.Session):
                 if r_json["status"] != 1:
                     raise RuntimeError(res.text)
 
-    @retry()
+    @retry(__name__)
     def _kill_app(self, app_id: str):
         url = self.base_url + '/api/killJobHist'
         res = self.post(url, data=json.dumps({
@@ -328,7 +443,7 @@ class HueDownload(requests.Session):
                 result = i
         return result
 
-    @retry()
+    @retry(__name__)
     def get_img(self):
         code_url = self.base_url + "/auth/code"
         code = self.get(code_url).json()

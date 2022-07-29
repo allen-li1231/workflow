@@ -314,7 +314,7 @@ class Notebook(requests.Session):
         self.notebook["name"] = name
         self.notebook["description"] = description
 
-    @retry()
+    @retry(__name__)
     @ensure_login
     def __create_notebook(self):
         self.log.debug("creating notebook")
@@ -334,7 +334,7 @@ class Notebook(requests.Session):
         self.log.debug(f"create notebook response: {res.text}")
         return res
 
-    @retry()
+    @retry(__name__)
     @ensure_login
     def _create_session(self):
         # remember that this api won't always init and return a new session
@@ -481,12 +481,12 @@ class Notebook(requests.Session):
             if sync:
                 self._result.await_result(print_log=print_log)
 
+            return self._result
         except KeyboardInterrupt:
             self.cancel_statement()
-        finally:
             return self._result
 
-    @retry()
+    @retry(__name__)
     def _execute(self, sql: str):
         sql_print = sql[: MAX_LEN_PRINT_SQL] + "..." \
             if len(sql) > MAX_LEN_PRINT_SQL \
@@ -542,7 +542,7 @@ class Notebook(requests.Session):
         self._set_hive(hive_settings)
         return closed_session_id, new_session_id
 
-    @retry()
+    @retry(__name__)
     @ensure_login
     def cancel_statement(self):
         self.log.info("cancelling statement")
@@ -554,7 +554,7 @@ class Notebook(requests.Session):
         self.log.debug(f"cancel statement response: {res.text}")
         return res
 
-    @retry()
+    @retry(__name__)
     @ensure_login
     def _close_statement(self):
         self.log.debug(f"closing statement")
@@ -566,7 +566,7 @@ class Notebook(requests.Session):
         self.log.debug(f"close statement response: {res.text}")
         return res
 
-    @retry()
+    @retry(__name__)
     @ensure_login
     def _close_session(self):
         self.log.debug(f"closing session")
@@ -577,7 +577,7 @@ class Notebook(requests.Session):
         self.log.debug(f"close session response: {res.text}")
         return res
 
-    @retry()
+    @retry(__name__)
     @ensure_login
     def close_notebook(self):
         if not hasattr(self, "notebook"):
@@ -596,7 +596,7 @@ class Notebook(requests.Session):
         self.is_logged_in = False
         return self._logout()
 
-    @retry()
+    @retry(__name__)
     def _logout(self):
         self.log.info(f"logging out")
 
@@ -635,7 +635,7 @@ class Notebook(requests.Session):
 
         return new_nb
 
-    @retry()
+    @retry(__name__)
     @ensure_login
     def _clear_history(self):
         self.log.info(f"clearing history")
@@ -715,7 +715,7 @@ class NotebookResult(object):
             else:
                 logger.setup_stdout_level(self.log, logging.WARNING)
 
-    @retry()
+    @retry(__name__)
     def _check_status(self):
         url = self.base_url + "/notebook/api/check_status"
         res = self._notebook.post(url,
@@ -790,7 +790,7 @@ class NotebookResult(object):
         self.check_status()
         return self.snippet["status"] == "available"
 
-    @retry()
+    @retry(__name__)
     def _fetch_result(self, rows: int = None, start_over=False):
         self.log.debug(f"fetching result")
         if not self.snippet["status"] == "available":
@@ -862,7 +862,7 @@ class NotebookResult(object):
         # length of application id is always 32
         return re.findall(r"application_\d{13}_\d{6}", self.full_log)
 
-    @retry()
+    @retry(__name__)
     def _get_logs(self, start_row, full_log):
         url = self.base_url + "/notebook/api/get_logs"
         payload = {

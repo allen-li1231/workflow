@@ -23,11 +23,11 @@ def ensure_login(func):
     return wrapper
 
 
-def retry(attempts: int = 3, wait_sec: int = 3):
+def retry(module='', attempts: int = 3, wait_sec: int = 3):
     def retry_wrapper(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            logger = logging.getLogger(func.__name__)
+            logger = logging.getLogger(f"{module}{'.' if len(module) else ''}{func.__name__}")
             i = 1
             while i < attempts:
                 try:
