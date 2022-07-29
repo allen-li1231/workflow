@@ -484,7 +484,7 @@ class Notebook(requests.Session):
             return self._result
         except KeyboardInterrupt:
             self.cancel_statement()
-            return self._result
+            raise KeyboardInterrupt
 
     @retry(__name__)
     def _execute(self, sql: str):
@@ -785,6 +785,7 @@ class NotebookResult(object):
                 )
         except KeyboardInterrupt:
             self._notebook.cancel_statement()
+            raise KeyboardInterrupt
 
     def is_ready(self):
         self.check_status()

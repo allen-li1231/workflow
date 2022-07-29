@@ -13,7 +13,7 @@ from requests_toolbelt import MultipartEncoder
 import logging
 
 from .settings import HUE_DOWNLOAD_BASE_URL
-from .decorators import retry
+from .decorators import retry, ensure_login
 from . import logger
 
 
@@ -34,14 +34,14 @@ class HueDownload(requests.Session):
         self.benchmark_imgs = np.load(r"W:\Python3\Lib\site-packages\wx_custom\img_dict.npy", allow_pickle=True).item()
         super(HueDownload, self).__init__()
 
-        self.headers = {
+        self.headers.update({
             "Accept": "application/json, text/plain, */*",
             "Content-Type": "application/json",
             "Referer": "http://10.19.185.103:8015/login?redirect=%2Fdashboard",
             "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64) "
                           "AppleWebKit/537.36 (KHTML, like Gecko) "
                           "Chrome/76.0.3809.100 Safari/537.36"
-        }
+        })
 
         self.login(self.username, self._password)
 
@@ -106,8 +106,8 @@ class HueDownload(requests.Session):
 
     def get_column(self, table_name):
         url = self.base_url + '/api/hive/getColumns?tableName=' + table_name
-        r = requests.get(url)
-        columns = pd.DataFrame(r.json())['name'].to_list()
+        res = self.get(url)
+        columns = [desc["name"] for desc in res.json()]
         return columns
 
     def upload_data(self, file_path, reason, uploadColumnsInfo='1', uploadEncryptColumns=''):
@@ -253,6 +253,7 @@ class HueDownload(requests.Session):
         r = pd.read_csv(StringIO(r.text), header=csv_header)
         return r
 
+    @ensure_login
     def download(self,
                  table: str,
                  reason: str,
@@ -261,13 +262,24 @@ class HueDownload(requests.Session):
                  decrypt_columns: list = None,
                  limit: int = None,
                  path: str = None,
-                 wait_sec: int = 3,
+                 wait_sec: int = 5,
                  timeout: float = float("inf")):
 
+        if columns is None:
+            if decrypt_columns is None:
+                columns = self.get_column(table)
+            else:
+                columns = decrypt_columns
+        elif decrypt_columns is not None:
+            columns = pd.unique(columns + decrypt_columns).tolist()
+
         res = self._download(
-            table=table, reason=reason,
-            columns=columns, column_names=column_names,
-            decrypt_columns=decrypt_columns, limit=str(limit))
+            table=table,
+            reason=reason,
+            columns=columns,
+            column_names=column_names,
+            decrypt_columns=decrypt_columns or [],
+            limit=str(limit) if limit else '')
 
         r_json = res.json()
 
@@ -283,14 +295,14 @@ class HueDownload(requests.Session):
             download_info = self.get_download_info(download_id)
             if download_info["status"] == 0:
                 # status: submit
+                self.log.info(f"prepare {table} elapsed: {time.perf_counter() - start_time:.3f}/{timeout} secs")
                 continue
             if download_info["status"] == 1:
                 # status: failed
                 raise RuntimeError(error_msg)
             if download_info["status"] == 3:
                 # status: success
-                ret = self.download_by_id(download_id=download_id, path=path)
-                return ret
+                return self.download_by_id(download_id=download_id, path=path)
             else:
                 raise RuntimeError(f"can't resolve download info: {download_info}")
 
@@ -309,7 +321,7 @@ class HueDownload(requests.Session):
         start_time = time.perf_counter()
         buffer = self._download_by_id(download_id)
         if path is None:
-            df = pd.read_csv(StringIO(buffer))
+            df = pd.read_csv(StringIO(buffer.text))
             self.log.info(f"download finished in {time.perf_counter() - start_time:.3f}")
             return df
 
@@ -326,16 +338,16 @@ class HueDownload(requests.Session):
     def _download(self,
                   table: str,
                   reason: str,
-                  columns: list = None,
-                  column_names: str = ' ',
-                  decrypt_columns: list = None,
-                  limit: str = None):
+                  columns: list,
+                  column_names: str,
+                  decrypt_columns,
+                  limit: str):
 
         url = self.base_url + '/api/downloadInfo'
         self.headers['Referer'] = 'http://10.19.185.103:8015/ud/downloadInfo'
         self.headers['Content-Type'] = 'application/json'
 
-        res = requests.post(url, data=json.dumps({
+        res = self.post(url, data=json.dumps({
             "columnsInfo": column_names,
             "downloadColumns": columns,
             "downloadDecryptionColumns": decrypt_columns,
@@ -361,8 +373,8 @@ class HueDownload(requests.Session):
 
     @retry(__name__)
     def _download_by_id(self, download_id: int):
-        url = self.base_url + '/api/downloadInfo/downloadData?id='
-        res = requests.get(
+        url = self.base_url + '/api/downloadInfo/downloadData'
+        res = self.get(
             url,
             params={"id": download_id},
             stream=True

@@ -15,8 +15,9 @@ def ensure_login(func):
 
         res = func(self, *args, **kwargs)
         if isinstance(res, requests.models.Response) \
-                and "X-Hue-Middleware-Response" in res.headers \
-                and res.headers["X-Hue-Middleware-Response"] == "LOGIN_REQUIRED":
+                and (("X-Hue-Middleware-Response" in res.headers
+                      and res.headers["X-Hue-Middleware-Response"] == "LOGIN_REQUIRED")
+                     or "Unauthorized" in res.text):
             self.login()
         return res
 

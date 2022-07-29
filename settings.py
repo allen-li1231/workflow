@@ -13,6 +13,7 @@ HIVE_PERFORMANCE_SETTINGS = {
     # "hive.exec.reducers.bytes.per.reducer": f"{134217728 // 2}"   # decrease by half would increase parallelism
     # when nodes read data from HDFS, combine small files < 64 MB to decrease number of mappers
     "mapreduce.input.fileinputformat.split.minsize": "67108864",
+    "dfs.datanode.max.xcievers": "8192",
 
     # vectorization and parallelism
     "hive.vectorized.execution.reduce.enabled": "true",
