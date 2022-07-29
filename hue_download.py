@@ -266,11 +266,8 @@ class HueDownload(requests.Session):
                  timeout: float = float("inf")):
 
         if columns is None:
-            if decrypt_columns is None:
-                columns = self.get_column(table)
-            else:
-                columns = decrypt_columns
-        elif decrypt_columns is not None:
+            columns = self.get_column(table)
+        if decrypt_columns is not None:
             columns = pd.unique(columns + decrypt_columns).tolist()
 
         res = self._download(
