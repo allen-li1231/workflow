@@ -3,7 +3,7 @@ import os
 import sys
 
 
-root = logging.getLogger()
+root = logging.getLogger("workflow")
 root.setLevel(logging.DEBUG)
 
 # create formatter

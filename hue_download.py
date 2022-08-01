@@ -277,7 +277,6 @@ class HueDownload(requests.Session):
             column_names=column_names,
             decrypt_columns=decrypt_columns or [],
             limit=str(limit) if limit else '')
-
         r_json = res.json()
 
         error_msg = f"cannot download {table}, please check table name and (decrypt) columns"
