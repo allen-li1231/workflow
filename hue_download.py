@@ -140,7 +140,7 @@ class HueDownload(requests.Session):
         data = MultipartEncoder(fields=upload_info)
         self.headers['Content-Type'] = data.content_type
 
-        r = requests.post(url, data=data)
+        r = self.post(url, data=data)
         r = r.json()
 
         t_sec = 30
@@ -151,7 +151,7 @@ class HueDownload(requests.Session):
         for i in range(t_try):
             print('waiting %3d/%d...' %
                   (t_sec * i, t_tol))
-            r = requests.get(self.base_url + '/api/uploadInfo?page=0&size=10&sort=id,desc')
+            r = self.get(self.base_url + '/api/uploadInfo?page=0&size=10&sort=id,desc')
             task_list = r.json()['content']
             for task in task_list:
                 if task['id'] == job_id and task['status'] == 3:
