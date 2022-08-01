@@ -314,13 +314,16 @@ class HueDownload(requests.Session):
 
         raise LookupError(f"cannot get info with download id: {download_id}")
 
-    def download_by_id(self, download_id, path: str = None):
+    def download_by_id(self, download_id, path=None):
         start_time = time.perf_counter()
         buffer = self._download_by_id(download_id)
         if path is None:
             df = pd.read_csv(StringIO(buffer.text))
             self.log.info(f"download finished in {time.perf_counter() - start_time:.3f}")
             return df
+
+        if not isinstance(path, str):
+            raise TypeError("path should be string")
 
         if path.rpartition(".")[2] != "csv":
             path += ".csv"

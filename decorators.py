@@ -2,7 +2,6 @@ import logging
 import time
 import requests
 from functools import wraps
-from .settings import HIVE_PERFORMANCE_SETTINGS, TEZ_SESSION_TIMEOUT_SECS
 
 
 def ensure_login(func):
@@ -46,7 +45,7 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
                     time.sleep(wait_sec)
                     continue
 
-                if res.status_code == 200:
+                if res.status_code == 200 or res.status_code == 201:
                     return res
 
                 logger.warning(f"response error in {i}/{attempts} attempts: {text}")
