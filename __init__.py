@@ -1,16 +1,13 @@
 """
-@Author: 王兴
-         李中豪    supermrli@hotmail.com
+@Author: 李中豪    supermrli@hotmail.com
 """
-import json
-import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
-
+import logging
 import numpy as np
+import pandas as pd
 
-from .hue import Notebook, Beeswax
+from .hue import Notebook
 from .settings import MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS
 from .hue_download import HueDownload
 from . import logger
@@ -34,40 +31,53 @@ class hue:
         self.hive_settings = hive_settings
         self.verbose = verbose
 
+        self._set_log(verbose)
         self.hue_sys = Notebook(username, password,
                                 name=name,
                                 description=description,
                                 hive_settings=hive_settings,
                                 verbose=verbose)
-        self.beeswax = Beeswax()
-        self.download = HueDownload(username, password, verbose)
-        self.beeswax.login(username, password)
+        self.hue_download = HueDownload(username, password, verbose)
 
         self.notebook_workers = [self.hue_sys]
 
-    def run_sql(self, sql, approx_time=10, attempt_times=100, database='default'):
-        """
-            sql 查询语句
-            approx_time 选填，默认查询间隔10秒，尝试时间
-            attempt_times  选填，默认查询100次，尝试次数
-            database 选填，默认'buffer_fk'
-        """
-        result = self.beeswax.execute(sql,
-                                      database=database,
-                                      approx_time=approx_time,
-                                      attempt_times=attempt_times)
-        return result
+    def _set_log(self, verbose):
+        self.log = logging.getLogger(__name__ + f".hue")
+        has_stream_handler = False
+        for handler in self.log.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                has_stream_handler = True
+                if verbose:
+                    handler.setLevel(logging.INFO)
+                else:
+                    handler.setLevel(logging.WARNING)
 
-    def run_notebook_sql(self,
-                         sql: str,
-                         database: str = "default",
-                         sync=True,
-                         print_log: bool = False,
-                         new_notebook=False):
+        if not has_stream_handler:
+            if verbose:
+                logger.setup_stdout_level(self.log, logging.INFO)
+            else:
+                logger.setup_stdout_level(self.log, logging.WARNING)
+
+    def run_sql(self,
+                sql: str,
+                database: str = "default",
+                sync=True,
+                print_log: bool = False,
+                new_notebook=False):
         """
-            sql 查询语句
-            database 选填，默认'default'
-            sync 选填，True，是否异步执行sql
+        sql 查询语句
+        database 选填，默认'default'
+        sync 选填，True，是否异步执行sql
+        :param sql: query raw string to execute
+        :param database: database on Hive
+                         default to 'default'
+        :param sync: whether to wait for sql to complete
+                     default to True
+        :param print_log: whether to print Yarn log during waiting
+                          default to False
+        :param new_notebook: whether to initialize a new notebook
+                             default to False
+        :return: hue.NotebookResult, which handles result of corresponding sql
         """
         if new_notebook:
             nb = self.hue_sys.new_notebook(self.name,
@@ -79,43 +89,16 @@ class hue:
 
         return nb.execute(sql, database, print_log, sync)
 
-    def run_sqls(self, sql_path, workers=3):
-        """
-            使用多线程，运行多条sql
-            sql_path 必填，查询语句存放目录
-            approx_time 选填，默认查询间隔10秒，尝试时间
-            attempt_times 选填，默认查询100次，尝试次数
-            workers 选填，默认值3，同时运行3条sql语句
-        """
-        th = ThreadPoolExecutor(max_workers=workers)
-        result = []
-        for root, dirs, files in os.walk(sql_path):
-            for file in files:
-                # print(file)
-                f = open(root + '/' + file)
-
-                with open(root + '/' + file, encoding='utf8') as f:
-                    sql = f.read()
-                    if re.findall('\-\-', f.readline()):
-                        arg = re.sub('\-\-', '', f.readline())
-
-                        arg_dict = json.loads(arg)
-
-                        sql = sql.format(**arg_dict)
-                    # print(sql)
-                result.append(th.submit(self.run_sql, sql).result())
-        return result
-
-    def run_notebook_sqls(self,
-                          sqls,
-                          database="default",
-                          n_jobs=3,
-                          wait_sec=3,
-                          sync=True):
+    def run_sqls(self,
+                 sqls,
+                 database="default",
+                 n_jobs=3,
+                 wait_sec=3,
+                 sync=True):
         """
         run concurrent hiveql using Hue Notebook api.
 
-        :param sqls: iterable of sql strings
+        :param sqls: iterable instance of sql strings
         :param database: string, default "default", database name
         :param n_jobs: number of concurrent queries to run, recommend not greater than 3,
                        otherwise it would sometimes causes "Too many opened sessions" error
@@ -143,9 +126,9 @@ class hue:
                     lst_result[idx] = notebook._result
                     del d_future[notebook]
                 except Exception as e:
-                    self.hue_sys.log.warning(e)
+                    self.log.warning(e)
                     sql = sqls[idx]
-                    self.hue_sys.log.warning(
+                    self.log.warning(
                         f"due to fetch_result exception above, "
                         f"result of the following sql is truncated: "
                         f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}")
@@ -159,8 +142,8 @@ class hue:
                                    sync=False)
                     d_future[worker] = i
                 except Exception as e:
-                    self.hue_sys.log.warning(e)
-                    self.hue_sys.log.warning(
+                    self.log.warning(e)
+                    self.log.warning(
                         f"due to execute exception above, "
                         f"result of the following sql is truncated: "
                         f"{sqls[i][: MAX_LEN_PRINT_SQL] + '...' if len(sqls[i]) > MAX_LEN_PRINT_SQL else sqls[i]}")
@@ -171,83 +154,48 @@ class hue:
 
         return lst_result
 
-    def split_table(self, table_name, table_size=None, unit_rows=100000):
-        th = ThreadPoolExecutor(max_workers=3)
-        if table_size is None:
-            table_m = table_name.split('.')
-            table_size = self.beeswax.table_detail(table_m[1], table_m[0])['details']['stats']['numRows']
-        num_sql = '''drop table if exists {table_name}_number;
-                create table {table_name}_number as
-                select a.*,row_number() over(order by 1) cnt from {table_name} a
-            '''.format(table_name=table_name)
-        try:
-            result = self.run_sql(num_sql)
-        except Exception as e:
-            print(e)
-            print(num_sql)
-
-        assert result == 'succeed'
-        table_ns = []
-        base_sql = '''drop table if exists {table_name}_{num};
-                create table {table_name}_{num} as
-                select * from {table_name}_number a
-                where cnt >= {start_num}
-                        and cnt <= {end_num}
-            '''
-        results = []
-        for i in range(0, int(table_size / unit_rows) + 1):
-            start_num = str(i * unit_rows)
-            end_num = str((i + 1) * unit_rows - 1)
-            print([start_num, end_num])
-
-            try:
-                temp_sql = base_sql.format(table_name=table_name, num=str(i), start_num=start_num, end_num=end_num)
-
-                results.append(th.submit(self.run_sql, temp_sql))
-            except Exception as e:
-                print(e)
-                print(temp_sql)
-            table_ns.append(table_name + '_' + str(i))
-
-        results[-1].result()
-        self.run_sql('drop table %s_number;' % (table_name))
-        print('split_down')
-
-        return table_ns
-
-    def download_data(self, table_name, reason, col_info=' ', limit=None, columns=None, Decode_col=[]):
+    def download(self,
+                 table: str,
+                 reason: str,
+                 columns: list = None,
+                 column_names: str = ' ',
+                 decrypt_columns: list = None,
+                 limit: int = None,
+                 path: str = None,
+                 wait_sec: int = 5,
+                 timeout: float = float("inf")):
         """
-            table_name 下载的表名称
-            reason  下载原因，请填写真实原因
-            col_info 选填，文本格式，下载表格的列名，逗号隔开，填写后将会在第一行加入列名。
-            limit 选填，下载几行数据，不填写则全部下载。
-            columns 选填，需要下载的列，不填则全部下载。
-            Decode_col 选填，list格式，需要解密的列，不填则不解密。
+        a refactored version of download_data from WxCustom
+        specify table information and load or download to local
+
+        :param table: table name on Hue (database name is required)
+        :param reason:  reason of downloading
+        :param columns: specify which of the columns in table to download from Hue,
+                        default to all columns
+        :param column_names: rename column names if needed
+        :param decrypt_columns: columns to be decrypted
+        :param limit: the maximum number of records to be downloaded
+                      default to all records
+        :param path: output csv file if specified.
+                     default to return Pandas.DataFrame
+                     this is designed to download large table without using up memory
+        :param wait_sec: time interval while waiting server for preparing for download
+                         default to 5 seconds
+        :param timeout: maximum seconds to wait for the server preparation
+                       default to wait indefinitely
+        :return: Pandas.DataFrame if path is not specified,
+                 otherwise output a csv file to path and return None
         """
-        table_m = table_name.split('.')
-        table_size = int(self.beeswax.table_detail(table_m[1], table_m[0])['details']['stats']['numRows'])
-
-        if table_size > 100000:
-            th = ThreadPoolExecutor(max_workers=3)
-            tables = self.split_table(table_name, table_size=table_size)
-            print(tables)
-            results = []
-            for table in tables:
-                results.append(th.submit(self.download.download_data, table, reason, col_info=col_info, columns=columns,
-                                         Decode_col=Decode_col))
-            cnt = 1
-            for result in results:
-                temp_df = result.result()
-                if cnt == 1:
-                    result_df = temp_df
-                    cnt += 1
-                else:
-                    result_df = result_df.append(temp_df)
-            return result_df
-
-        result_df = self.download.download_data(table_name, reason, col_info=col_info, limit=limit, columns=columns,
-                                                Decode_col=Decode_col)
-        return result_df
+        return self.hue_download.download(
+            table,
+            reason,
+            columns,
+            column_names,
+            decrypt_columns,
+            limit,
+            path,
+            wait_sec,
+            timeout)
 
     def upload_data(self, file_path, reason, uploadColumnsInfo='1', uploadEncryptColumns='', table_name=None):
         """
@@ -257,11 +205,13 @@ class hue:
             uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
             table_name 选填，默认Nnoe，使用自动分配的表名
         """
-        uploaded_table = self.download.upload_data(file_path, reason, uploadColumnsInfo=uploadColumnsInfo,
-                                                   uploadEncryptColumns=uploadEncryptColumns)
-        if table_name != None:
+        uploaded_table = self.hue_download.upload_data(file_path=file_path,
+                                                       reason=reason,
+                                                       uploadColumnsInfo=uploadColumnsInfo,
+                                                       uploadEncryptColumns=uploadEncryptColumns)
+        if table_name is not None:
             try:
-                self.run_sqls('ALTER TABLE %s RENAME TO %s' % (uploaded_table, table_name))
+                self.run_sql('ALTER TABLE %s RENAME TO %s' % (uploaded_table, table_name))
                 print('file uploaded to the table ' + table_name)
                 return table_name
             except Exception as e:
@@ -279,11 +229,12 @@ class hue:
             uploadColumnsInfo 选填，默认写1，可用作备注，与上传数据无关
             uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
         """
-        uploaded_table = self.download.upload_data(self, table_name, reason, uploadColumnsInfo=uploadColumnsInfo,
-                                                   uploadEncryptColumns=uploadEncryptColumns)
-
+        uploaded_table = self.hue_download.upload_data(file_path=file_path,
+                                                       reason=reason,
+                                                       uploadColumnsInfo=uploadColumnsInfo,
+                                                       uploadEncryptColumns=uploadEncryptColumns)
         try:
-            self.run_sqls('insert into table %s \nselect * from %s' % (table_name, uploaded_table))
+            self.run_sql('insert into table %s \nselect * from %s' % (table_name, uploaded_table))
             print('success')
         except Exception as e:
             print('upload failed, the data is uploaded to the table ' + uploaded_table)
@@ -332,33 +283,37 @@ class hue:
         #    print('Decreased by {:.1f}%'.format(100 * (start_mem - end_mem) / start_mem)) # 减少的内存
         return df
 
-    def get_data(self, sql, reason, table_name=None, approx_time=10, attempt_times=100, Decode_col=[], col=' '):
+    def get_table(self,
+                  table,
+                  columns=None,
+                  database: str = "default",
+                  decrypt_columns: list = None,
+                  print_log: bool = False):
         """
-            sql 表格名称使用{cr_text} 代替
-            reason 下载原因，请填写真实原因
-            approx_time 选填，默认查询间隔10秒，尝试时间
-            attempt_times 选填，默认查询100次，尝试次数
+        get data from Hue to local
+        :param table: table name on Hue
+        :param columns: iterable instance of string of column names
+                        default to all columns
+        :param database: string, default "default", database name
+        :param decrypt_columns: columns to be decrypted
+        :param print_log: whether to print Yarn log during waiting
+                          default to False
+        :return: Pandas.DataFrame
         """
-        header = 'drop table {cr_text};\ncreate table {cr_text} as                        \n'
-        if table_name == None:
-            table_name = 'buffer_fk.temp_01'
-        try:
-            header = header.format(cr_text=table_name)
-            sql = header + sql
-            print(sql[:500])
-            self.run_sql(sql, approx_time, attempt_times)
-
-            result_df = self.download_data(table_name, reason, col_info=col, Decode_col=Decode_col)
-            self.reduce_mem_usage(result_df)
-            return result_df
-        except Exception as e:
-            print(e)
-
-    def table_detail(self, table_name, database):
-        return self.beeswax.table_detail(table_name, database)
+        if decrypt_columns is None:
+            sql = f"select {','.join(columns) if columns else '*'} from {table};"
+            res = self.run_sql(sql=sql,
+                               database=database,
+                               print_log=print_log)
+            return pd.DataFrame(**res.fetchall())
+        else:
+            return self.download(table=table,
+                                 reason=table,
+                                 columns=columns,
+                                 decrypt_columns=decrypt_columns)
 
     def kill_app(self, app_id):
-        return self.download.kill_app(app_id)
+        return self.hue_download.kill_app(app_id)
 
     def close(self):
         for worker in self.notebook_workers:

@@ -264,7 +264,28 @@ class HueDownload(requests.Session):
                  path: str = None,
                  wait_sec: int = 5,
                  timeout: float = float("inf")):
+        """
+        a refactored version of download_data from WxCustom
+        specify table information and load or download to local
 
+        :param table: table name on Hue (database name is required)
+        :param reason:  reason of downloading
+        :param columns: specify which of the columns in table to download from Hue,
+                        default to all columns
+        :param column_names: rename column names if needed
+        :param decrypt_columns: columns to be decrypted
+        :param limit: the maximum number of records to be downloaded
+                      default to all records
+        :param path: output csv file if specified.
+                     default to return Pandas.DataFrame
+                     this is designed to download large table without using up memory
+        :param wait_sec: time interval while waiting server for preparing for download
+                         default to 5 seconds
+        :param timeout: maximum seconds to wait for the server preparation
+                       default to wait indefinitely
+        :return: Pandas.DataFrame if path is not specified,
+                 otherwise output a csv file to path and return None
+        """
         if columns is None:
             columns = self.get_column(table)
         if decrypt_columns is not None:
@@ -300,8 +321,10 @@ class HueDownload(requests.Session):
                 # status: success
                 return self.download_by_id(download_id=download_id, path=path)
             else:
+                self.log.exception(f"can't resolve download info: {download_info}")
                 raise RuntimeError(f"can't resolve download info: {download_info}")
 
+        self.log.exception(f"download {table} timed out")
         return TimeoutError(f"download {table} timed out")
 
     def get_download_info(self, download_id: int, **kwargs):
