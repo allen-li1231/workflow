@@ -403,6 +403,7 @@ class HueDownload(requests.Session):
         )
         return res
 
+    @ensure_login
     def kill_app(self, app_id):
         """
         kill a YARN application

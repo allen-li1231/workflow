@@ -89,6 +89,9 @@ class hue:
 
         return nb.execute(sql, database, print_log, sync)
 
+    def run_notebook_sql(self, *args, **kwargs):
+        return self.run_sql(*args, **kwargs)
+
     def run_sqls(self,
                  sqls,
                  database="default",
@@ -153,6 +156,14 @@ class hue:
             time.sleep(wait_sec)
 
         return lst_result
+
+    def run_notebook_sqls(self, *args, **kwargs):
+        return self.run_sqls(*args, **kwargs)
+
+    def download_data(self, *args, **kwargs):
+        self.log.warning("download_data is depreciated and won't be maintained in the future,"
+                         "please instead use 'download'")
+        return self.hue_download.download_data(*args, **kwargs)
 
     def download(self,
                  table: str,
