@@ -520,6 +520,28 @@ class Notebook(requests.Session):
         """
 
         self.hive_settings["hive.execution.engine"] = engine.lower()
+        if self.hive_settings["hive.execution.engine"] == 'mr':
+            self.hive_settings["hive.input.format"] = "org.apache.hadoop.hive.ql.io.CombineHiveInputFormat"
+        else:
+            self.hive_settings["hive.input.format"] = "org.apache.hadoop.hive.ql.io.HiveInputFormat"
+        self._set_hive(self.hive_settings)
+
+    def set_memory_multiplier(self, multiplier: float):
+        """
+        Set the multiplier over default memory setup
+
+        :param multiplier: e.g. if multiplier is 2. memory allocation would times 2
+        """
+
+        self.hive_settings["mapreduce.map.memory.mb"] = f"{2048. * multiplier:.0f}"
+        self.hive_settings["mapreduce.reduce.memory.mb"] = f"{2048. * multiplier:.0f}"
+        self.hive_settings["mapreduce.map.java.opts"] = \
+            f"-Djava.net.preferIPv4Stack=true -Xmx{1700. * multiplier:.0f}m"
+        self.hive_settings["mapreduce.reduce.java.opts"] = \
+            f"-Djava.net.preferIPv4Stack=true -Xmx{1700. * multiplier:.0f}m"
+        self.hive_settings["tez.runtime.io.sort.mb"] = f"{820. * multiplier:.0f}"
+        self.hive_settings["hive.auto.convert.join.noconditionaltask.size"] = f"{209715200. * multiplier:.0f}"
+
         self._set_hive(self.hive_settings)
 
     def set_hive(self, key, val):

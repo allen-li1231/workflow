@@ -16,7 +16,7 @@ __all__ = ["hue", "Notebook", "HueDownload"]
 
 
 class hue:
-    def __init__(self, username: str, password: str,
+    def __init__(self, username: str, password: str = None,
                  name="", description="",
                  hive_settings=HIVE_PERFORMANCE_SETTINGS,
                  verbose=False):
@@ -36,7 +36,7 @@ class hue:
                                 name=name,
                                 description=description,
                                 hive_settings=hive_settings,
-                                verbose=verbose)
+                                verbose=False)
         self.hue_download = HueDownload(username, password, verbose)
 
         self.notebook_workers = [self.hue_sys]
@@ -174,7 +174,8 @@ class hue:
                  limit: int = None,
                  path: str = None,
                  wait_sec: int = 5,
-                 timeout: float = float("inf")):
+                 timeout: float = float("inf")
+                 ):
         """
         a refactored version of download_data from WxCustom
         specify table information and load or download to local
@@ -208,7 +209,37 @@ class hue:
             wait_sec,
             timeout)
 
-    def upload_data(self, file_path, reason, uploadColumnsInfo='1', uploadEncryptColumns='', table_name=None):
+    def upload(self,
+               data,
+               reason: str,
+               columns: list = None,
+               column_names: list = None,
+               encrypt_columns: list = None,
+               wait_sec: int = 5,
+               timeout: float = float("inf"),
+               table_name: str = None
+               ):
+        uploaded_table = self.hue_download.upload(data=data,
+                                                  reason=reason,
+                                                  columns=columns,
+                                                  column_names=column_names,
+                                                  encrypt_columns=encrypt_columns,
+                                                  wait_sec=wait_sec,
+                                                  timeout=timeout)
+        if table_name is None:
+            self.log.info('data has uploaded to table ' + uploaded_table)
+            return uploaded_table
+
+        try:
+            self.run_sql('ALTER TABLE %s RENAME TO %s' % (uploaded_table, table_name))
+            self.log.info('data has uploaded to the table ' + table_name)
+            return table_name
+        except Exception as e:
+            self.log.warning(e)
+            self.log.info('data has uploaded to the table ' + uploaded_table)
+            return uploaded_table
+
+    def upload_data(self, file_path, reason, column_names='1', encrypt_columns='', table_name=None):
         """
             file_path  必填，需要上传文件位置
             reason 必填，上传事由
@@ -218,18 +249,18 @@ class hue:
         """
         uploaded_table = self.hue_download.upload_data(file_path=file_path,
                                                        reason=reason,
-                                                       uploadColumnsInfo=uploadColumnsInfo,
-                                                       uploadEncryptColumns=uploadEncryptColumns)
+                                                       column_names=column_names,
+                                                       encrypt_columns=encrypt_columns)
         if table_name is not None:
             try:
                 self.run_sql('ALTER TABLE %s RENAME TO %s' % (uploaded_table, table_name))
-                print('file uploaded to the table ' + table_name)
+                self.log.info('file uploaded to the table ' + table_name)
                 return table_name
             except Exception as e:
-                print(e)
+                self.log.warning(e)
                 return uploaded_table
         else:
-            print('file has uploaded to table ' + uploaded_table)
+            self.log.info('file has uploaded to table ' + uploaded_table)
             return uploaded_table
 
     def insert_data(self, file_path, table_name, reason, uploadColumnsInfo='1', uploadEncryptColumns=''):

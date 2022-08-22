@@ -1,12 +1,14 @@
 import base64
 import json
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from io import BytesIO, StringIO
+from io import BytesIO, StringIO, IOBase
 
 import numpy as np
 import pandas as pd
+import openpyxl as xl
 import requests
 from PIL import Image
 from requests_toolbelt import MultipartEncoder
@@ -104,64 +106,11 @@ class HueDownload(requests.Session):
         self.is_logged_in = True
         self.headers["Authorization"] = "Bearer " + r_json["token"]
 
+    @ensure_login
     def get_column(self, table_name):
-        url = self.base_url + '/api/hive/getColumns?tableName=' + table_name
-        res = self.get(url)
+        res = self._get_column(table_name=table_name)
         columns = [desc["name"] for desc in res.json()]
         return columns
-
-    def upload_data(self, file_path, reason, uploadColumnsInfo='1', uploadEncryptColumns=''):
-        '''
-            file_path  必填，需要上传文件位置
-            reason 必填，上传事由
-            uploadColumnsInfo 选填，默认写1，可用作备注，与上传数据无关
-            uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
-        '''
-        self.headers['Referer'] = 'http://10.19.185.103:8015/ud/uploadInfo'
-        file = (file_path, open(file_path, 'rb'))
-        upload_info = {'reason': reason,
-                       'uploadColumnsInfo': uploadColumnsInfo,
-                       'uploadEncryptColumns': uploadEncryptColumns}
-
-        if 'Authorization' not in self.headers.keys():
-            self.login(self.username, self._password)
-        url = self.base_url + '/api/uploadInfo/upload'
-        if re.findall('\.csv$', file_path):
-            upload_data = pd.read_csv(file_path)
-        elif re.findall('\.xlsx$', file_path):
-            upload_data = pd.read_excel(file_path)
-        else:
-            'data format is not supported yet! please upload csv or xlsx with english title'
-        upload_info['uploadColumns'] = ','.join(upload_data.columns.tolist())
-        upload_info['uploadRow'] = str(upload_data.shape[0])
-
-        upload_info['file'] = file
-
-        data = MultipartEncoder(fields=upload_info)
-        self.headers['Content-Type'] = data.content_type
-
-        r = self.post(url, data=data)
-        r = r.json()
-
-        t_sec = 30
-        t_try = 100
-        t_tol = t_sec * t_try
-        job_id = r['id']
-        tag = 0
-        for i in range(t_try):
-            print('waiting %3d/%d...' %
-                  (t_sec * i, t_tol))
-            r = self.get(self.base_url + '/api/uploadInfo?page=0&size=10&sort=id,desc')
-            task_list = r.json()['content']
-            for task in task_list:
-                if task['id'] == job_id and task['status'] == 3:
-                    tag = 1
-                    table_name = task['rsTable']
-                    break
-            if tag == 1:
-                break
-            time.sleep(t_sec)
-        return table_name
 
     def download_data(self, table_name, reason, col_info=' ', limit=None, columns=None, Decode_col=[]):
         '''
@@ -309,7 +258,7 @@ class HueDownload(requests.Session):
         start_time = time.perf_counter()
         while time.perf_counter() - start_time < timeout:
             time.sleep(wait_sec)
-            download_info = self.get_download_info(download_id)
+            download_info = self.get_info_by_id(download_id, type="download")
             if download_info["status"] == 0:
                 # status: submit
                 self.log.info(f"prepare {table} elapsed: {time.perf_counter() - start_time:.3f}/{timeout} secs")
@@ -327,14 +276,141 @@ class HueDownload(requests.Session):
         self.log.exception(f"download {table} timed out")
         return TimeoutError(f"download {table} timed out")
 
-    def get_download_info(self, download_id: int, **kwargs):
-        res = self._get_download_info(**kwargs)
+    @ensure_login
+    def upload_data(self,
+                    file_path: str,
+                    reason: str,
+                    column_names: str = '1',
+                    encrypt_columns: str = '',
+                    wait_sec: int = 5,
+                    timeout: float = float("inf")
+                    ):
+        '''
+            file_path  必填，需要上传文件位置
+            reason 必填，上传事由
+            uploadColumnsInfo 选填，默认写1，可用作备注，与上传数据无关
+            uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
+        '''
+        if re.findall('\.csv$|\.xlsx?$', file_path):
+            # instead of read all data in memory using pd.read_...
+            # read only necessary column info and row count
+            wb = xl.load_workbook(file_path, read_only=True)
+            sheet = wb.worksheets[0]
+
+            columns = [c.value for c in next(sheet.iter_rows(min_row=1, max_row=1))]
+            if len(columns) == 0:
+                raise RuntimeError(f'get empty list of column name from input file {file_path}')
+
+            rows = sheet.max_row
+            if rows == 0:
+                raise RuntimeError(f'get empty rows of input file {file_path}')
+        else:
+            raise RuntimeError('data format is not supported yet! please upload csv or xlsx with english title')
+
+        wb.close()
+        buffer = open(file_path, "rb")
+        res = self._upload(file_path=buffer,
+                           reason=reason,
+                           columns=columns,
+                           column_names=column_names,
+                           encrypt_columns=encrypt_columns,
+                           rows=rows)
+        id_ = res.json()['id']
+
+        error_msg = f"cannot upload {file_path}, please check table name and (encrypt) columns"
+        start_time = time.perf_counter()
+        while time.perf_counter() - start_time < timeout:
+            time.sleep(wait_sec)
+            upload_info = self.get_info_by_id(id_, type="upload")
+            if upload_info["status"] == 0:
+                # status: submit
+                self.log.info(f"prepare upload elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
+                continue
+            if upload_info["status"] == 1:
+                # status: failed
+                self.log.exception(f"RuntimeError: cannot upload {file_path}")
+                raise RuntimeError(error_msg)
+            if upload_info['status'] == 3:
+                return upload_info['rsTable']
+
+        self.log.exception(f"upload {file_path} timed out")
+        return TimeoutError(f"upload {file_path} timed out")
+
+    @ensure_login
+    def upload(self,
+               data,
+               reason: str,
+               columns: list = None,
+               column_names: list = None,
+               encrypt_columns: list = None,
+               wait_sec: int = 5,
+               timeout: float = float("inf")
+               ):
+
+        if isinstance(data, pd.DataFrame):
+            buffer = StringIO()
+            buffer.name = "in-memory_pandas_dataframe"
+            data.to_csv(buffer, index=False)
+            columns, rows = columns or data.columns, data.shape[0]
+        elif isinstance(data, str) and re.findall('\.csv$|\.xlsx?$', data):
+            # instead of read all data in memory using pd.read_...
+            # read only necessary column info and row count
+            wb = xl.load_workbook(data, read_only=True)
+            sheet = wb.worksheets[0]
+
+            columns = [c.value for c in next(sheet.iter_rows(min_row=1, max_row=1))]
+            if len(columns) == 0:
+                raise RuntimeError(f'get empty list of column name from input file {data}')
+
+            rows = sheet.max_row
+            if rows == 0:
+                raise RuntimeError(f'get empty rows of input file {data}')
+
+            wb.close()
+            buffer = open(data, "rb")
+        else:
+            raise RuntimeError('data format is not supported yet, please upload csv or xlsx with english title')
+
+        res = self._upload(file_buffer=buffer,
+                           reason=reason,
+                           columns=columns,
+                           column_names=column_names or [],
+                           encrypt_columns=encrypt_columns or [],
+                           rows=rows)
+        buffer.close()
+        id_ = res.json()['id']
+        error_msg = f"cannot upload {buffer.name}, please check table name and (encrypt) columns"
+        start_time = time.perf_counter()
+        while time.perf_counter() - start_time < timeout:
+            time.sleep(wait_sec)
+            upload_info = self.get_info_by_id(id_, type="upload")
+            if upload_info["status"] == 0:
+                # status: submit
+                self.log.info(f"prepare upload elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
+                continue
+            if upload_info["status"] == 1:
+                # status: failed
+                self.log.exception(f"RuntimeError: cannot upload {buffer.name}")
+                raise RuntimeError(error_msg)
+            if upload_info['status'] == 3:
+                return upload_info['rsTable']
+
+        self.log.exception(f"upload {buffer.name} timed out")
+        return TimeoutError(f"upload {buffer.name} timed out")
+
+    def get_info_by_id(self, id_: int, type, **kwargs):
+        if type == 'upload' or type == 1:
+            res = self._get_upload_info(**kwargs)
+        elif type == 'download' or type == 0:
+            res = self._get_download_info(**kwargs)
+        else:
+            raise TypeError(f"expecting type to be either 'upload'(1), 'download'(0), got {type}")
         r_json = res.json()
         for content in r_json["content"]:
-            if content["id"] == download_id:
+            if content["id"] == id_:
                 return content
 
-        raise LookupError(f"cannot get info with download id: {download_id}")
+        raise LookupError(f"cannot get info with download id: {id_}")
 
     def download_by_id(self, download_id, path=None):
         start_time = time.perf_counter()
@@ -355,6 +431,12 @@ class HueDownload(requests.Session):
                 f.write(chunk)
 
         self.log.info(f"download finished in {time.perf_counter() - start_time:.3f}")
+
+    @retry(__name__)
+    def _get_column(self, table_name):
+        url = self.base_url + '/api/hive/getColumns?tableName=' + table_name
+        res = self.get(url)
+        return res
 
     @retry(__name__)
     def _download(self,
@@ -380,12 +462,52 @@ class HueDownload(requests.Session):
         return res
 
     @retry(__name__)
+    def _upload(self,
+                file_buffer: IOBase,
+                reason: str,
+                columns: list,
+                column_names: list,
+                encrypt_columns: list,
+                rows: int):
+
+        self.log.info(f"uploading {file_buffer.name}")
+        url = self.base_url + '/api/uploadInfo/upload'
+        upload_info = {'reason': reason,
+                       'uploadColumnsInfo': ','.join(column_names),
+                       'uploadEncryptColumns': ','.join(encrypt_columns),
+                       "uploadColumns": ",".join(columns),
+                       'uploadRow': str(rows)}
+
+        file = (os.path.basename(file_buffer.name), file_buffer)
+        upload_info['file'] = file
+        data = MultipartEncoder(fields=upload_info)
+
+        self.headers['Referer'] = 'http://10.19.185.103:8015/ud/uploadInfo'
+        self.headers['Content-Type'] = data.content_type
+        res = self.post(url, data=data)
+        return res
+
+    @retry(__name__)
     def _get_download_info(self,
                            page=0,
                            size=10,
                            sort="id,desc"):
 
         url = self.base_url + '/api/downloadInfo'
+        res = self.get(url, params={
+            "page": page,
+            "size": size,
+            "sort": sort
+        })
+        return res
+
+    @retry(__name__)
+    def _get_upload_info(self,
+                         page=0,
+                         size=10,
+                         sort="id,desc"):
+
+        url = self.base_url + '/api/uploadInfo'
         res = self.get(url, params={
             "page": page,
             "size": size,

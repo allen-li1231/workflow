@@ -4,16 +4,27 @@ HUE_DOWNLOAD_BASE_URL = "http://10.19.185.103:8000"
 
 MAX_LEN_PRINT_SQL = 100
 
-TEZ_SESSION_TIMEOUT_SECS = 600
+TEZ_SESSION_TIMEOUT_SECS = 300
 
 HIVE_PERFORMANCE_SETTINGS = {
     # resource settings:
     # "mapreduce.map.memory.mb": f"{2048 * 2}",
     # "mapreduce.reduce.memory.mb": f"{2048 * 2}",
+    # "mapreduce.map.java.opts": f"-Djava.net.preferIPv4Stack=true -Xmx{1700 * 2}m",
+    # "mapreduce.reduce.java.opts": f"-Djava.net.preferIPv4Stack=true -Xmx{1700 * 2}m",
     # "hive.exec.reducers.bytes.per.reducer": f"{134217728 // 2}"   # decrease by half would increase parallelism
-    # when nodes read data from HDFS, combine small files < 64 MB to decrease number of mappers
-    "mapreduce.input.fileinputformat.split.minsize": "67108864",
-    "dfs.datanode.max.xcievers": "8192",
+
+    # when nodes read data from HDFS, combine small files < 32 MB to decrease number of mappers
+    # "hive.tez.input.format": "org.apache.hadoop.hive.ql.io.HiveInputFormat",
+    "tez.grouping.min-size": "33554432",
+    "tez.grouping.max-size": "536870912",
+    "tez.grouping.split-waves": "1.8",
+    # enable block read from HDFS, which decreases number of mappers while using mr engine
+    "mapred.min.split.size": "33554432",
+    "mapred.max.split.size": "536870912",
+    "mapreduce.input.fileinputformat.split.minsize": "33554432",
+    # max(mapred.min.split.size, min(mapred.max.split.size, dfs.block.size))
+    "mapreduce.input.fileinputformat.split.maxsize": "536870912",
 
     # vectorization and parallelism
     "hive.vectorized.execution.reduce.enabled": "true",
@@ -54,10 +65,8 @@ HIVE_PERFORMANCE_SETTINGS = {
     "tez.session.am.dag.submit.timeout.secs": f"{TEZ_SESSION_TIMEOUT_SECS}",
     "tez.am.container.reuse.enabled": "true",
     "tez.am.container.session.delay-allocation-millis": f"{TEZ_SESSION_TIMEOUT_SECS * 1000}",
-    # enable block read from HDFS, which decreases number of mappers
-    "hive.tez.input.format": "org.apache.hadoop.hive.ql.io.CombineHiveInputFormat",
 
     # let spark app wait longer for executors' responses
-    "hive.spark.client.connect.timeout": "30000ms",
-    "hive.spark.client.server.connect.timeout": "300000ms"
+    # "hive.spark.client.connect.timeout": "30000ms",
+    # "hive.spark.client.server.connect.timeout": "300000ms"
 }
