@@ -299,8 +299,8 @@ class hue:
 
     def get_table(self,
                   table,
-                  columns=None,
                   database: str = "default",
+                  columns=None,
                   decrypt_columns: list = None,
                   print_log: bool = False):
         """

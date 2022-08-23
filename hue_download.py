@@ -245,7 +245,7 @@ class HueDownload(requests.Session):
             table=table,
             reason=reason,
             columns=columns,
-            column_names=column_names,
+            column_names=column_names or [],
             decrypt_columns=decrypt_columns or [],
             limit=limit)
         r_json = res.json()
@@ -262,7 +262,7 @@ class HueDownload(requests.Session):
             download_info = self.get_info_by_id(download_id, info_type="download")
             if download_info["status"] == 0:
                 # status: submit
-                self.log.info(f"prepare {table} elapsed: {time.perf_counter() - start_time:.3f}/{timeout} secs")
+                self.log.info(f"prepare {table} elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
                 continue
             if download_info["status"] == 1:
                 # status: failed
@@ -397,7 +397,7 @@ class HueDownload(requests.Session):
                            columns=columns,
                            column_names=column_names or [],
                            encrypt_columns=encrypt_columns or [],
-                           rows=nrows or -1)
+                           nrows=nrows or -1)
         buffer.close()
         id_ = res.json()['id']
         error_msg = f"cannot upload {buffer.name}, please check table name and (encrypt) columns"
