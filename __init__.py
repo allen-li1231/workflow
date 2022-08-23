@@ -161,8 +161,6 @@ class hue:
         return self.run_sqls(*args, **kwargs)
 
     def download_data(self, *args, **kwargs):
-        self.log.warning("download_data is depreciated and won't be maintained in the future,"
-                         "please instead use 'download'")
         return self.hue_download.download_data(*args, **kwargs)
 
     def download(self,
@@ -217,8 +215,7 @@ class hue:
             uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
             table_name 选填，默认Nnoe，使用自动分配的表名
         """
-        self.log.warning("upload_data is depreciated and won't be maintained in the future,"
-                         "please instead use 'upload'")
+
         uploaded_table = self.hue_download.upload_data(file_path=file_path,
                                                        reason=reason,
                                                        column_names=column_names,

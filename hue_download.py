@@ -113,15 +113,16 @@ class HueDownload(requests.Session):
         return columns
 
     def download_data(self, table_name, reason, col_info=' ', limit=None, columns=None, Decode_col=[]):
-        '''
+        """
         table_name 必填，需要下载的表名
         reason 必填，下载事由
         col_info 选填,默认值' ',
         limit 选填，默认值None，下载条数不填则全部下载，最多10万行
         columns 选填，默认值None，不填则全部下载
         Decode_col 选填，默认值[]， 不填则不解密
-        '''
-
+        """
+        self.log.warning("download_data is depreciated and won't be maintained in the future,"
+                         "please instead use 'download'")
         download_info = {}
         self.headers['Referer'] = 'http://10.19.185.103:8015/ud/downloadInfo'
         self.headers['Content-Type'] = 'application/json'
@@ -207,12 +208,13 @@ class HueDownload(requests.Session):
                  table: str,
                  reason: str,
                  columns: list = None,
-                 column_names: str = ' ',
+                 column_names: list = None,
                  decrypt_columns: list = None,
                  limit: int = None,
                  path: str = None,
                  wait_sec: int = 5,
-                 timeout: float = float("inf")):
+                 timeout: float = float("inf")
+                 ):
         """
         a refactored version of download_data from WxCustom
         specify table information and load or download to local
@@ -244,9 +246,9 @@ class HueDownload(requests.Session):
             table=table,
             reason=reason,
             columns=columns,
-            column_names=column_names,
+            column_names=','.join(column_names),
             decrypt_columns=decrypt_columns or [],
-            limit=str(limit) if limit else '')
+            limit=limit)
         r_json = res.json()
 
         error_msg = f"cannot download {table}, please check table name and (decrypt) columns"
@@ -258,7 +260,7 @@ class HueDownload(requests.Session):
         start_time = time.perf_counter()
         while time.perf_counter() - start_time < timeout:
             time.sleep(wait_sec)
-            download_info = self.get_info_by_id(download_id, type="download")
+            download_info = self.get_info_by_id(download_id, info_type="download")
             if download_info["status"] == 0:
                 # status: submit
                 self.log.info(f"prepare {table} elapsed: {time.perf_counter() - start_time:.3f}/{timeout} secs")
@@ -291,6 +293,8 @@ class HueDownload(requests.Session):
             uploadColumnsInfo 选填，默认写1，可用作备注，与上传数据无关
             uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
         '''
+        self.log.warning("upload_data is depreciated and won't be maintained in the future,"
+                         "please instead use 'upload'")
         if re.findall('\.csv$|\.xlsx?$', file_path):
             # instead of read all data in memory using pd.read_...
             # read only necessary column info and row count
@@ -321,7 +325,7 @@ class HueDownload(requests.Session):
         start_time = time.perf_counter()
         while time.perf_counter() - start_time < timeout:
             time.sleep(wait_sec)
-            upload_info = self.get_info_by_id(id_, type="upload")
+            upload_info = self.get_info_by_id(id_, info_type="upload")
             if upload_info["status"] == 0:
                 # status: submit
                 self.log.info(f"prepare upload elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
@@ -343,15 +347,32 @@ class HueDownload(requests.Session):
                columns: list = None,
                column_names: list = None,
                encrypt_columns: list = None,
+               nrows: int = None,
                wait_sec: int = 5,
                timeout: float = float("inf")
                ):
+        """
+        a refactored version of upload_data from WxCustom
+        parse upload data and call upload API, if success, return uploaded table name.
 
+        :param data: pandas.DataFrame, pandas.Series or path str to xlsx,xls or csv file
+        :param reason: str, upload reason
+        :param columns: list, list of columns to upload
+        :param column_names: list, list of column with respective to their alias,
+                            must be as same length as columns
+        :param encrypt_columns: list, list of columns to encrypt during upload
+        :param nrows: number of rows to upload, default to be -1, all rows
+        :param wait_sec: time interval while waiting server for preparing for upload
+                         default to 5 seconds
+        :param timeout: maximum seconds to wait for the server preparation
+                       default to wait indefinitely
+        :return: str, name of uploaded table
+        """
         if isinstance(data, (pd.DataFrame, pd.Series)):
             buffer = StringIO()
             buffer.name = "in-memory_pandas_dataframe"
             data.to_csv(buffer, index=False)
-            columns, rows = columns or data.columns, data.shape[0]
+            columns, nrows = columns or data.columns, nrows or data.shape[0]
         elif isinstance(data, str) and re.findall('\.csv$|\.xlsx?$', data):
             # instead of read all data in memory using pd.read_...
             # read only necessary column info and row count
@@ -362,28 +383,29 @@ class HueDownload(requests.Session):
             if len(columns) == 0:
                 raise RuntimeError(f'get empty list of column name from input file {data}')
 
-            rows = sheet.max_row
-            if rows == 0:
+            nrows = nrows or sheet.max_row
+            if nrows == 0:
                 raise RuntimeError(f'get empty rows of input file {data}')
 
             wb.close()
             buffer = open(data, "rb")
         else:
-            raise RuntimeError('data format is not supported yet, please upload csv or xlsx with english title')
+            raise RuntimeError('data format is not supported yet,'
+                               ' please upload DataFrame, csv or xlsx with english title')
 
         res = self._upload(file_buffer=buffer,
                            reason=reason,
                            columns=columns,
                            column_names=column_names or [],
                            encrypt_columns=encrypt_columns or [],
-                           rows=rows)
+                           rows=nrows or -1)
         buffer.close()
         id_ = res.json()['id']
         error_msg = f"cannot upload {buffer.name}, please check table name and (encrypt) columns"
         start_time = time.perf_counter()
         while time.perf_counter() - start_time < timeout:
             time.sleep(wait_sec)
-            upload_info = self.get_info_by_id(id_, type="upload")
+            upload_info = self.get_info_by_id(id_, info_type="upload")
             if upload_info["status"] == 0:
                 # status: submit
                 self.log.info(f"prepare upload elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
@@ -398,13 +420,13 @@ class HueDownload(requests.Session):
         self.log.exception(f"upload {buffer.name} timed out")
         return TimeoutError(f"upload {buffer.name} timed out")
 
-    def get_info_by_id(self, id_: int, type, **kwargs):
-        if type == 'upload' or type == 1:
+    def get_info_by_id(self, id_: int, info_type, **kwargs):
+        if info_type == 'upload' or info_type == 1:
             res = self._get_upload_info(**kwargs)
-        elif type == 'download' or type == 0:
+        elif info_type == 'download' or info_type == 0:
             res = self._get_download_info(**kwargs)
         else:
-            raise TypeError(f"expecting type to be either 'upload'(1), 'download'(0), got {type}")
+            raise TypeError(f"expecting type to be either 'upload'(1), 'download'(0), got {info_type}")
         r_json = res.json()
         for content in r_json["content"]:
             if content["id"] == id_:
@@ -445,7 +467,8 @@ class HueDownload(requests.Session):
                   columns: list,
                   column_names: str,
                   decrypt_columns,
-                  limit: str):
+                  limit: int
+                  ):
 
         url = self.base_url + '/api/downloadInfo'
         self.headers['Referer'] = 'http://10.19.185.103:8015/ud/downloadInfo'
@@ -455,7 +478,7 @@ class HueDownload(requests.Session):
             "columnsInfo": column_names,
             "downloadColumns": columns,
             "downloadDecryptionColumns": decrypt_columns,
-            "downloadLimit": limit,
+            "downloadLimit": str(limit) if limit else '',
             "downloadTable": table,
             "reason": reason
         }))
@@ -468,7 +491,8 @@ class HueDownload(requests.Session):
                 columns: list,
                 column_names: list,
                 encrypt_columns: list,
-                rows: int):
+                nrows: int = -1
+                ):
 
         self.log.info(f"uploading {file_buffer.name}")
         url = self.base_url + '/api/uploadInfo/upload'
@@ -476,7 +500,7 @@ class HueDownload(requests.Session):
                        'uploadColumnsInfo': ','.join(column_names),
                        'uploadEncryptColumns': ','.join(encrypt_columns),
                        "uploadColumns": ",".join(columns),
-                       'uploadRow': str(rows)}
+                       'uploadRow': str(nrows)}
 
         file = (os.path.basename(file_buffer.name), file_buffer)
         upload_info['file'] = file
@@ -491,7 +515,8 @@ class HueDownload(requests.Session):
     def _get_download_info(self,
                            page=0,
                            size=10,
-                           sort="id,desc"):
+                           sort="id,desc"
+                           ):
 
         url = self.base_url + '/api/downloadInfo'
         res = self.get(url, params={
@@ -505,7 +530,8 @@ class HueDownload(requests.Session):
     def _get_upload_info(self,
                          page=0,
                          size=10,
-                         sort="id,desc"):
+                         sort="id,desc"
+                         ):
 
         url = self.base_url + '/api/uploadInfo'
         res = self.get(url, params={
