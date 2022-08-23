@@ -87,7 +87,7 @@ class HueDownload(requests.Session):
             raise KeyError("username must be specified with password")
 
         if self.username is not None and self._password is None:
-            print("Please provide Hue password:", end='')
+            print("Please provide HueDownload password:", end='')
             self._password = input("")
 
         self.log.debug(f"logging in for user [{self.username}]")
