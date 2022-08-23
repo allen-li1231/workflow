@@ -235,9 +235,6 @@ class Notebook(requests.Session):
 
         super(Notebook, self).__init__()
 
-        self.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) " \
-                                     "AppleWebKit/537.36 (KHTML, like Gecko) " \
-                                     "Chrome/76.0.3809.100 Safari/537.36"
         if self.username is not None \
                 and password is not None:
             self.login(self.username, password)
@@ -275,20 +272,7 @@ class Notebook(requests.Session):
             self._password = input("")
 
         self.log.debug(f"logging in for user: [{self.username}]")
-        login_url = self.base_url + '/accounts/login/'
-        self.get(login_url)
-        self.headers["Referer"] = login_url
-
-        form_data = dict(username=self.username,
-                         password=self._password,
-                         csrfmiddlewaretoken=self.cookies['csrftoken'],
-                         next='/')
-
-        res = self.post(login_url,
-                        data=form_data,
-                        cookies={},
-                        headers=self.headers)
-
+        res = self._login()
         if res.status_code != 200 \
                 or f"var LOGGED_USERNAME = '';" in res.text:
             self.log.exception('login failed for [%s] at %s'
@@ -307,6 +291,25 @@ class Notebook(requests.Session):
             self._prepare_notebook(self.name, self.description, self.hive_settings)
 
         return self
+
+    @retry(__name__)
+    def _login(self):
+        self.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) " \
+                                     "AppleWebKit/537.36 (KHTML, like Gecko) " \
+                                     "Chrome/76.0.3809.100 Safari/537.36"
+        login_url = self.base_url + '/accounts/login/'
+        self.get(login_url)
+        self.headers["Referer"] = login_url
+        form_data = dict(username=self.username,
+                         password=self._password,
+                         csrfmiddlewaretoken=self.cookies['csrftoken'],
+                         next='/')
+
+        res = self.post(login_url,
+                        data=form_data,
+                        cookies={},
+                        headers=self.headers)
+        return res
 
     def _create_notebook(self, name="", description=""):
         r_json = self.__create_notebook().json()

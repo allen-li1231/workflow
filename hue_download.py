@@ -36,19 +36,10 @@ class HueDownload(requests.Session):
         self.benchmark_imgs = np.load(r"W:\Python3\Lib\site-packages\wx_custom\img_dict.npy", allow_pickle=True).item()
         super(HueDownload, self).__init__()
 
-        self.headers.update({
-            "Accept": "application/json, text/plain, */*",
-            "Content-Type": "application/json",
-            "Referer": "http://10.19.185.103:8015/login?redirect=%2Fdashboard",
-            "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64) "
-                          "AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/76.0.3809.100 Safari/537.36"
-        })
-
         self.login(self.username, self._password)
 
     def _set_log(self, verbose):
-        self.log = logging.getLogger(__name__ + f".HueDownload")
+        self.log = logging.getLogger(__name__ + ".HueDownload")
         has_stream_handler = False
         for handler in self.log.handlers:
             if isinstance(handler, logging.StreamHandler):
@@ -66,6 +57,14 @@ class HueDownload(requests.Session):
 
     @retry(__name__)
     def _login(self, username, password):
+        self.headers.update({
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+            "Referer": "http://10.19.185.103:8015/login?redirect=%2Fdashboard",
+            "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/76.0.3809.100 Safari/537.36"
+        })
         login_url = self.base_url + "/auth/login"
         self.id_answer()
         form_data = dict(username=username,

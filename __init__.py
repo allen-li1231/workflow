@@ -1,10 +1,8 @@
 """
 @Author: 李中豪    supermrli@hotmail.com
 """
-import re
 import time
 import logging
-import numpy as np
 import pandas as pd
 
 from .hue import Notebook
@@ -42,7 +40,7 @@ class hue:
         self.notebook_workers = [self.hue_sys]
 
     def _set_log(self, verbose):
-        self.log = logging.getLogger(__name__ + f".hue")
+        self.log = logging.getLogger(__name__ + ".hue")
         has_stream_handler = False
         for handler in self.log.handlers:
             if isinstance(handler, logging.StreamHandler):
