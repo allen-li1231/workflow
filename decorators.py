@@ -18,7 +18,8 @@ def ensure_login(func):
                       and res.headers["X-Hue-Middleware-Response"] == "LOGIN_REQUIRED")
                      or "Unauthorized" in res.text):
             self.login()
-        return func(self, *args, **kwargs)
+            return func(self, *args, **kwargs)
+        return res
 
     return wrapper
 
