@@ -246,7 +246,7 @@ class HueDownload(requests.Session):
             table=table,
             reason=reason,
             columns=columns,
-            column_names=','.join(column_names),
+            column_names=column_names,
             decrypt_columns=decrypt_columns or [],
             limit=limit)
         r_json = res.json()
@@ -287,12 +287,12 @@ class HueDownload(requests.Session):
                     wait_sec: int = 5,
                     timeout: float = float("inf")
                     ):
-        '''
+        """
             file_path  必填，需要上传文件位置
             reason 必填，上传事由
             uploadColumnsInfo 选填，默认写1，可用作备注，与上传数据无关
             uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
-        '''
+        """
         self.log.warning("upload_data is depreciated and won't be maintained in the future,"
                          "please instead use 'upload'")
         if re.findall('\.csv$|\.xlsx?$', file_path):
@@ -355,7 +355,7 @@ class HueDownload(requests.Session):
         a refactored version of upload_data from WxCustom
         parse upload data and call upload API, if success, return uploaded table name.
 
-        :param data: pandas.DataFrame, pandas.Series or path str to xlsx,xls or csv file
+        :param data: pandas.DataFrame, pandas.Series or path str to xlsx, xls or csv file
         :param reason: str, upload reason
         :param columns: list, list of columns to upload
         :param column_names: list, list of column with respective to their alias,
@@ -465,7 +465,7 @@ class HueDownload(requests.Session):
                   table: str,
                   reason: str,
                   columns: list,
-                  column_names: str,
+                  column_names: list,
                   decrypt_columns,
                   limit: int
                   ):
@@ -475,7 +475,7 @@ class HueDownload(requests.Session):
         self.headers['Content-Type'] = 'application/json'
 
         res = self.post(url, data=json.dumps({
-            "columnsInfo": column_names,
+            "columnsInfo": ','.join(column_names),
             "downloadColumns": columns,
             "downloadDecryptionColumns": decrypt_columns,
             "downloadLimit": str(limit) if limit else '',

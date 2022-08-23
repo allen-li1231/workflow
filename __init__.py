@@ -167,7 +167,7 @@ class hue:
                  table: str,
                  reason: str,
                  columns: list = None,
-                 column_names: str = ' ',
+                 column_names: list = None,
                  decrypt_columns: list = None,
                  limit: int = None,
                  path: str = None,
@@ -242,6 +242,24 @@ class hue:
                timeout: float = float("inf"),
                table_name: str = None
                ):
+        """
+        a refactored version of upload_data from WxCustom
+        parse upload data and call upload API, if success, return uploaded table name.
+
+        :param data: pandas.DataFrame, pandas.Series or path str to xlsx,xls or csv file
+        :param reason: str, upload reason
+        :param columns: list, list of columns to upload
+        :param column_names: list, list of column with respective to their alias,
+                            must be as same length as columns
+        :param encrypt_columns: list, list of columns to encrypt during upload
+        :param nrows: number of rows to upload, default to be -1, all rows
+        :param wait_sec: time interval while waiting server for preparing for upload
+                         default to 5 seconds
+        :param timeout: maximum seconds to wait for the server preparation
+                       default to wait indefinitely
+        :param table_name: str, user can nominate final table name
+        :return: str, name of uploaded table
+        """
         uploaded_table = self.hue_download.upload(data=data,
                                                   reason=reason,
                                                   columns=columns,
@@ -288,7 +306,7 @@ class hue:
                   decrypt_columns: list = None,
                   print_log: bool = False):
         """
-        get data from Hue to local
+        get data from Hue to local (ei
         :param table: table name on Hue
         :param columns: iterable instance of string of column names
                         default to all columns
