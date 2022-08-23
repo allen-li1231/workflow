@@ -347,7 +347,7 @@ class HueDownload(requests.Session):
                timeout: float = float("inf")
                ):
 
-        if isinstance(data, pd.DataFrame):
+        if isinstance(data, (pd.DataFrame, pd.Series)):
             buffer = StringIO()
             buffer.name = "in-memory_pandas_dataframe"
             data.to_csv(buffer, index=False)

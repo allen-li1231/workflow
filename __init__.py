@@ -209,6 +209,32 @@ class hue:
             wait_sec,
             timeout)
 
+    def upload_data(self, file_path, reason, column_names='1', encrypt_columns='', table_name=None):
+        """
+            file_path  必填，需要上传文件位置
+            reason 必填，上传事由
+            uploadColumnsInfo 选填，默认写1，可用作备注，与上传数据无关
+            uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
+            table_name 选填，默认Nnoe，使用自动分配的表名
+        """
+        self.log.warning("upload_data is depreciated and won't be maintained in the future,"
+                         "please instead use 'upload'")
+        uploaded_table = self.hue_download.upload_data(file_path=file_path,
+                                                       reason=reason,
+                                                       column_names=column_names,
+                                                       encrypt_columns=encrypt_columns)
+        if table_name is not None:
+            try:
+                self.run_sql('ALTER TABLE %s RENAME TO %s' % (uploaded_table, table_name))
+                self.log.info('file uploaded to the table ' + table_name)
+                return table_name
+            except Exception as e:
+                self.log.warning(e)
+                return uploaded_table
+        else:
+            self.log.info('file has uploaded to table ' + uploaded_table)
+            return uploaded_table
+
     def upload(self,
                data,
                reason: str,
@@ -237,30 +263,6 @@ class hue:
         except Exception as e:
             self.log.warning(e)
             self.log.info('data has uploaded to the table ' + uploaded_table)
-            return uploaded_table
-
-    def upload_data(self, file_path, reason, column_names='1', encrypt_columns='', table_name=None):
-        """
-            file_path  必填，需要上传文件位置
-            reason 必填，上传事由
-            uploadColumnsInfo 选填，默认写1，可用作备注，与上传数据无关
-            uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
-            table_name 选填，默认Nnoe，使用自动分配的表名
-        """
-        uploaded_table = self.hue_download.upload_data(file_path=file_path,
-                                                       reason=reason,
-                                                       column_names=column_names,
-                                                       encrypt_columns=encrypt_columns)
-        if table_name is not None:
-            try:
-                self.run_sql('ALTER TABLE %s RENAME TO %s' % (uploaded_table, table_name))
-                self.log.info('file uploaded to the table ' + table_name)
-                return table_name
-            except Exception as e:
-                self.log.warning(e)
-                return uploaded_table
-        else:
-            self.log.info('file has uploaded to table ' + uploaded_table)
             return uploaded_table
 
     def insert_data(self, file_path, table_name, reason, uploadColumnsInfo='1', uploadEncryptColumns=''):
