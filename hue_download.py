@@ -369,7 +369,7 @@ class HueDownload(requests.Session):
         """
         if isinstance(data, (pd.DataFrame, pd.Series)):
             buffer = StringIO()
-            buffer.name = "in-memory_pandas_dataframe"
+            buffer.name = "pandas_dataframe"
             data.to_csv(buffer, index=False)
             columns, nrows = columns or data.columns, nrows or data.shape[0]
         elif isinstance(data, str) and re.findall('\.csv$|\.xlsx?$', data):
@@ -391,6 +391,15 @@ class HueDownload(requests.Session):
         else:
             raise RuntimeError('data format is not supported yet,'
                                ' please upload DataFrame, csv or xlsx with english title')
+        if encrypt_columns:
+            set_encrypt_columns, set_columns = set(encrypt_columns), set(columns)
+            if not set_encrypt_columns.issubset(set_columns):
+                err_msg = f"encrypt column" \
+                          f" {','.join(set_encrypt_columns.difference(set_columns))}" \
+                          f" not in {buffer.name}"
+                buffer.close()
+                self.log.exception(err_msg)
+                raise ValueError(err_msg)
 
         res = self._upload(file_buffer=buffer,
                            reason=reason,
