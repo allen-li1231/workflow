@@ -716,7 +716,7 @@ class NotebookResult(object):
         self._logs_row = 0
         self._app_ids = set()
         self._app_id = ''
-        self._progress = 0
+        self._progress = 0.
 
         self._notebook = notebook
         # the proxy might fail to respond when the response body becomes too large
@@ -798,11 +798,18 @@ class NotebookResult(object):
         while True:
             time.sleep(wait_sec)
             self.check_status()
-            pbar.set_description(f"awaiting {self._app_id if self._app_id else 'result'}")
-            pbar.update(self.update_progress(self._app_id) if self._app_id else 0)
+            if len(self._app_id) > 0:
+                pbar.set_description(f"awaiting {self._app_id}")
+                pbar.update(self.update_progress(self._app_id))
+            else:
+                pbar.set_description(f"awaiting result")
+                pbar.update(0.)
 
             if self.snippet["status"] == "available":
                 self.log.debug(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
+                pbar.set_description(f"awaiting {self._app_id if self._app_id else 'result'}")
+                pbar.update(100. - self._progress)
+                self._progress = 100.
                 pbar.close()
                 return
 
@@ -893,12 +900,7 @@ class NotebookResult(object):
         if isinstance(progress, (float, int)):
             self._progress, progress = progress, self._progress
         elif isinstance(progress, str) and len(progress) == 0:
-            if self._progress > 0:
-                # assuming a success
-                progress = self._progress
-                self._progress = 100.
-            else:
-                progress = 0
+            progress = self._progress
 
         return self._progress - progress
 
@@ -907,7 +909,7 @@ class NotebookResult(object):
         if len(self._app_ids) == 0:
             self.fetch_cloud_logs()
 
-        return self._app_ids
+        return self._app_id
 
     @retry(__name__)
     def _get_app_info(self, app_id):
