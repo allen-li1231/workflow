@@ -31,7 +31,8 @@ class Beeswax(requests.Session):
         self.hive_settings = hive_settings
         self.verbose = verbose
 
-        self._set_log(name="Beeswax", verbose=verbose)
+        self.log = logging.getLogger(__name__ + f".Beeswax")
+        logger.set_log_level(self.log, verbose=verbose)
 
         if base_url is None:
             self.base_url = HUE_BASE_URL
@@ -50,23 +51,6 @@ class Beeswax(requests.Session):
         if self.username is not None \
                 and password is not None:
             self.login(self.username, password)
-
-    def _set_log(self, name, verbose):
-        self.log = logging.getLogger(__name__ + f".Beeswax[{name}]")
-        has_stream_handler = False
-        for handler in self.log.handlers:
-            if isinstance(handler, logging.StreamHandler):
-                has_stream_handler = True
-                if verbose:
-                    handler.setLevel(logging.INFO)
-                else:
-                    handler.setLevel(logging.WARNING)
-
-        if not has_stream_handler:
-            if verbose:
-                logger.setup_stdout_level(self.log, logging.INFO)
-            else:
-                logger.setup_stdout_level(self.log, logging.WARNING)
 
     def login(self, username: str = None, password: str = None):
         self.is_logged_in = False
@@ -222,7 +206,8 @@ class Notebook(requests.Session):
         self.hive_settings = hive_settings
         self.verbose = verbose
 
-        self._set_log(name=name, verbose=verbose)
+        self.log = logging.getLogger(__name__ + f".Notebook[{name}]")
+        logger.set_log_level(self.log, verbose=verbose)
 
         if base_url is None:
             self.base_url = HUE_BASE_URL
@@ -240,23 +225,6 @@ class Notebook(requests.Session):
         if self.username is not None \
                 and password is not None:
             self.login(self.username, password)
-
-    def _set_log(self, name, verbose):
-        self.log = logging.getLogger(__name__ + f".Notebook[{name}]")
-        has_stream_handler = False
-        for handler in self.log.handlers:
-            if isinstance(handler, logging.StreamHandler):
-                has_stream_handler = True
-                if verbose:
-                    handler.setLevel(logging.INFO)
-                else:
-                    handler.setLevel(logging.WARNING)
-
-        if not has_stream_handler:
-            if verbose:
-                logger.setup_stdout_level(self.log, logging.INFO)
-            else:
-                logger.setup_stdout_level(self.log, logging.WARNING)
 
     def login(self, username: str = None, password: str = None):
         self.is_logged_in = False
@@ -642,11 +610,12 @@ class Notebook(requests.Session):
         new_nb.base_url = self.base_url
         new_nb.hive_settings = hive_settings
         new_nb.username = self.username
+        new_nb._password = self._password
         new_nb.is_logged_in = self.is_logged_in
         new_nb.verbose = self.verbose if verbose is None else verbose
 
-        new_nb._set_log(name=name, verbose=verbose)
-        new_nb._password = self._password
+        new_nb.log = logging.getLogger(__name__ + f".Notebook[{name}]")
+        logger.set_log_level(new_nb.log)
 
         if recreate_session:
             new_nb._prepare_notebook(name, description,
@@ -711,6 +680,9 @@ class NotebookResult(object):
         self.is_logged_in = notebook.is_logged_in
         self.verbose = notebook.verbose
 
+        self.log = logging.getLogger(__name__ + f".NotebookResult[{self.name}]")
+        logger.set_log_level(self.log, verbose=self.verbose)
+
         self.data = None
         self.full_log = ""
         self._logs_row = 0
@@ -722,25 +694,6 @@ class NotebookResult(object):
         # the proxy might fail to respond when the response body becomes too large
         # manually set it smaller if so
         self.rows_per_fetch = 32768
-
-        self._set_log(notebook.name, self.verbose)
-
-    def _set_log(self, name, verbose):
-        self.log = logging.getLogger(__name__ + f".NotebookResult[{name}]")
-        has_stream_handler = False
-        for handler in self.log.handlers:
-            if isinstance(handler, logging.StreamHandler):
-                has_stream_handler = True
-                if verbose:
-                    handler.setLevel(logging.INFO)
-                else:
-                    handler.setLevel(logging.WARNING)
-
-        if not has_stream_handler:
-            if verbose:
-                logger.setup_stdout_level(self.log, logging.INFO)
-            else:
-                logger.setup_stdout_level(self.log, logging.WARNING)
 
     @retry(__name__)
     def _check_status(self):
