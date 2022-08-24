@@ -2,7 +2,7 @@ import copy
 import gc
 import csv
 import json
-import re
+from tqdm import tqdm
 import logging
 import os
 import time
@@ -486,6 +486,7 @@ class Notebook(requests.Session):
             return self._result
         except KeyboardInterrupt:
             self.cancel_statement()
+            self.recreate_session()
             raise KeyboardInterrupt
 
     @retry(__name__)
@@ -566,8 +567,8 @@ class Notebook(requests.Session):
         self._set_hive(hive_settings)
         return closed_session_id, new_session_id
 
-    @retry(__name__)
     @ensure_login
+    @retry(__name__)
     def cancel_statement(self):
         self.log.info("cancelling statement")
         url = self.base_url + "/notebook/api/cancel_statement"
@@ -713,7 +714,9 @@ class NotebookResult(object):
         self.data = None
         self.full_log = ""
         self._logs_row = 0
-        self._app_id = []
+        self._app_ids = set()
+        self._app_id = ''
+        self._progress = 0
 
         self._notebook = notebook
         # the proxy might fail to respond when the response body becomes too large
@@ -750,15 +753,12 @@ class NotebookResult(object):
 
     def check_status(self, return_log=False):
         app_id = self.app_id
-        if return_log:
-            self.log.debug(f"checking {'yarn app: ' + ', '.join(app_id) if len(app_id) else 'status'}")
-        else:
-            self.log.info(f"checking {'yarn app: ' + ', '.join(app_id) if len(app_id) else 'status'}")
+        self.log.debug(f"checking {'yarn app: ' + ', '.join(app_id) if len(app_id) else 'status'}")
 
         res = self._check_status()
         r_json = res.json()
 
-        # download cloud log by default
+        # fetch cloud log by default
         cloud_log = self.fetch_cloud_logs()
         if r_json["status"] != 0:
             if len(cloud_log) > 0:
@@ -770,46 +770,41 @@ class NotebookResult(object):
                 raise RuntimeError(r_json)
 
         status = r_json["query_status"]["status"]
-        if status != "running" and status != "available":
-            self.log.warning(f"query {status}")
-
         self.snippet["status"] = status
+        if status != "running" and status != "available":
+            self.log.exception(f"query {status}")
+            raise RuntimeError(f"query {status}")
 
         if return_log:
             return cloud_log
 
         return status
 
-    def await_result(self, attempts: float = float("inf"), wait_sec: int = 1, print_log=False):
-        try:
-            i = 1
-            start_time = time.perf_counter()
-            while i < attempts:
-                msg = f"({i}/{attempts})" if not attempts == float("inf") else ""
-                msg = f"awaiting result " \
-                      f"elapsed {time.perf_counter() - start_time:.2f} secs" \
-                      + msg
-                self.log.debug(msg)
+    def await_result(self, wait_sec: int = 1, print_log=False):
+        start_time = time.perf_counter()
+        while print_log:
+            time.sleep(wait_sec)
+            self.log.debug(f"awaiting result "
+                           f"elapsed {time.perf_counter() - start_time:.2f} secs")
+            cloud_log = self.check_status(return_log=print_log)
+            if len(cloud_log) > 0:
+                print(cloud_log)
 
-                cloud_log = self.check_status(return_log=print_log)
-                if print_log and len(cloud_log) > 0:
-                    print(cloud_log)
+            if self.snippet["status"] == "available":
+                self.log.debug(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
+                return
 
-                if self.snippet["status"] == "available":
-                    self.log.info(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
-                    return
+        pbar = tqdm(total=100, bar_format='{l_bar}{bar}|{elapsed}', desc="awaiting result")
+        while True:
+            time.sleep(wait_sec)
+            self.check_status()
+            pbar.set_description(f"awaiting {self._app_id if self._app_id else 'result'}")
+            pbar.update(self.update_progress(self._app_id) if self._app_id else 0)
 
-                i += 1
-                time.sleep(wait_sec)
-
-            sql = self.snippet["statement"]
-            self.log.warning(
-                f"result not ready for sql: "
-                f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}"
-                )
-        except KeyboardInterrupt:
-            self._notebook.cancel_statement()
-            raise KeyboardInterrupt
+            if self.snippet["status"] == "available":
+                self.log.debug(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
+                pbar.close()
+                return
 
     def is_ready(self):
         self.check_status()
@@ -872,6 +867,12 @@ class NotebookResult(object):
                 self.log.warning(f"Could not parse logs from cloud response: {res.text}")
             return ''
 
+        for i, job in enumerate(cloud_log["jobs"]):
+            if job["started"] and not job["finished"]:
+                self._app_id = job["name"]
+
+            self._app_ids.add(job["name"])
+
         cloud_log = cloud_log["logs"]
         if len(cloud_log) > 0:
             self.full_log += "\n" + cloud_log if len(self.full_log) > 0 else cloud_log
@@ -879,13 +880,40 @@ class NotebookResult(object):
 
         return cloud_log
 
+    def update_progress(self, app_id: str):
+        res = self._get_app_info(app_id).json()
+        if 'message' in res:
+            self.log.warning(res["message"])
+            return 0.
+        elif 'uri' in res:
+            self.log.warning(f"cannot read {app_id} progress")
+            return 0.
+
+        progress = res["job"]["progress"]
+        if isinstance(progress, (float, int)):
+            self._progress, progress = progress, self._progress
+        elif isinstance(progress, str) and len(progress) == 0:
+            if self._progress > 0:
+                # assuming a success
+                progress = self._progress
+                self._progress = 100.
+            else:
+                progress = 0
+
+        return self._progress - progress
+
     @property
     def app_id(self):
-        if self._logs_row == 0 and self.snippet["status"] != "running":
+        if len(self._app_ids) == 0:
             self.fetch_cloud_logs()
 
-        # length of application id is always 32
-        return re.findall(r"application_\d{13}_\d{6}", self.full_log)
+        return self._app_ids
+
+    @retry(__name__)
+    def _get_app_info(self, app_id):
+        url = self.base_url + f'/jobbrowser/jobs/{app_id}?format=json'
+        res = self._notebook.post(url)
+        return res
 
     @retry(__name__)
     def _get_logs(self, start_row, full_log):
