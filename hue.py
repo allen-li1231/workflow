@@ -2,9 +2,10 @@ import copy
 import gc
 import csv
 import json
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import logging
 import os
+import sys
 import time
 import traceback
 import uuid
@@ -615,7 +616,7 @@ class Notebook(requests.Session):
         new_nb.verbose = self.verbose if verbose is None else verbose
 
         new_nb.log = logging.getLogger(__name__ + f".Notebook[{name}]")
-        logger.set_log_level(new_nb.log)
+        logger.set_log_level(new_nb.log, verbose=new_nb.verbose)
 
         if recreate_session:
             new_nb._prepare_notebook(name, description,
@@ -689,11 +690,15 @@ class NotebookResult(object):
         self._app_ids = set()
         self._app_id = ''
         self._progress = 0.
+        self._progressbar = None
 
         self._notebook = notebook
         # the proxy might fail to respond when the response body becomes too large
         # manually set it smaller if so
         self.rows_per_fetch = 32768
+
+    def is_ready(self):
+        return self.snippet["status"] == "available"
 
     @retry(__name__)
     def _check_status(self):
@@ -705,8 +710,7 @@ class NotebookResult(object):
         return res
 
     def check_status(self, return_log=False):
-        app_id = self.app_id
-        self.log.debug(f"checking {'yarn app: ' + ', '.join(app_id) if len(app_id) else 'status'}")
+        self.log.info(f"checking {'yarn app: ' + self._app_id if len(self._app_id) else 'status'}")
 
         res = self._check_status()
         r_json = res.json()
@@ -725,20 +729,18 @@ class NotebookResult(object):
         status = r_json["query_status"]["status"]
         self.snippet["status"] = status
         if status != "running" and status != "available":
-            self.log.exception(f"query {status}")
-            raise RuntimeError(f"query {status}")
+            self.log.warning(f"query {status}")
 
         if return_log:
             return cloud_log
 
         return status
 
-    def await_result(self, wait_sec: int = 1, print_log=False):
+    def await_result(self, wait_sec: int = 0, print_log=False):
         start_time = time.perf_counter()
         while print_log:
             time.sleep(wait_sec)
-            self.log.debug(f"awaiting result "
-                           f"elapsed {time.perf_counter() - start_time:.2f} secs")
+            self.log.debug(f"awaiting result elapsed {time.perf_counter() - start_time:.2f} secs")
             cloud_log = self.check_status(return_log=print_log)
             if len(cloud_log) > 0:
                 print(cloud_log)
@@ -747,28 +749,37 @@ class NotebookResult(object):
                 self.log.debug(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
                 return
 
-        pbar = tqdm(total=100, bar_format='{l_bar}{bar}|{elapsed}', desc="awaiting result")
         while True:
             time.sleep(wait_sec)
             self.check_status()
-            if len(self._app_id) > 0:
-                pbar.set_description(f"awaiting {self._app_id}")
-                pbar.update(self.update_progress(self._app_id))
-            else:
-                pbar.set_description(f"awaiting result")
-                pbar.update(0.)
-
-            if self.snippet["status"] == "available":
+            self.update_progressbar()
+            if self.is_ready():
                 self.log.debug(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
-                pbar.set_description(f"awaiting {self._app_id if self._app_id else 'result'}")
-                pbar.update(100. - self._progress)
-                self._progress = 100.
-                pbar.close()
                 return
 
-    def is_ready(self):
-        self.check_status()
-        return self.snippet["status"] == "available"
+    def update_progressbar(self, position=0):
+        if self._progressbar is None:
+            self._progressbar = tqdm(total=100.,
+                                     position=position,
+                                     leave=True,
+                                     bar_format='{l_bar}{bar:25}|{elapsed}',
+                                     desc=f"NotebookResult[{self.name}] awaiting result",
+                                     file=sys.stdout,
+                                     ascii=True)
+        if self.is_ready():
+            self._progressbar.set_description(f"NotebookResult[{self.name}]"
+                                              f" awaiting {self._app_id if self._app_id else 'result'}")
+            self._progressbar.update(100. - self._progress)
+            self._progress = 100.
+            self._progressbar.close()
+        elif len(self._app_id) > 0:
+            self._progressbar.set_description(f"NotebookResult[{self.name}]"
+                                              f" awaiting {self._app_id}")
+            self._progressbar.update(self._update_progress(self._app_id))
+        else:
+            self._progressbar.set_description(f"NotebookResult[{self.name}]"
+                                              f" awaiting result")
+            self._progressbar.update(0.)
 
     @retry(__name__)
     def _fetch_result(self, rows: int = None, start_over=False):
@@ -840,7 +851,7 @@ class NotebookResult(object):
 
         return cloud_log
 
-    def update_progress(self, app_id: str):
+    def _update_progress(self, app_id: str):
         res = self._get_app_info(app_id).json()
         if 'message' in res:
             self.log.warning(res["message"])

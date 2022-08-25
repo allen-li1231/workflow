@@ -312,12 +312,13 @@ class HueDownload(requests.Session):
 
         wb.close()
         buffer = open(file_path, "rb")
-        res = self._upload(file_path=buffer,
+        res = self._upload(file_buffer=buffer,
                            reason=reason,
                            columns=columns,
                            column_names=column_names,
                            encrypt_columns=encrypt_columns,
-                           rows=rows)
+                           nrows=rows)
+        buffer.close()
         id_ = res.json()['id']
 
         error_msg = f"cannot upload {file_path}, please check table name and (encrypt) columns"
@@ -404,8 +405,8 @@ class HueDownload(requests.Session):
         res = self._upload(file_buffer=buffer,
                            reason=reason,
                            columns=columns,
-                           column_names=column_names or [],
-                           encrypt_columns=encrypt_columns or [],
+                           column_names=','.join(column_names) if column_names else '',
+                           encrypt_columns=','.join(encrypt_columns) if encrypt_columns else '',
                            nrows=nrows or -1)
         buffer.close()
         id_ = res.json()['id']
@@ -497,16 +498,16 @@ class HueDownload(requests.Session):
                 file_buffer: IOBase,
                 reason: str,
                 columns: list,
-                column_names: list,
-                encrypt_columns: list,
+                column_names: str,
+                encrypt_columns: str,
                 nrows: int = -1
                 ):
 
         self.log.info(f"uploading {file_buffer.name}")
         url = self.base_url + '/api/uploadInfo/upload'
         upload_info = {'reason': reason,
-                       'uploadColumnsInfo': ','.join(column_names),
-                       'uploadEncryptColumns': ','.join(encrypt_columns),
+                       'uploadColumnsInfo': column_names,
+                       'uploadEncryptColumns': encrypt_columns,
                        "uploadColumns": ",".join(columns),
                        'uploadRow': str(nrows)}
 

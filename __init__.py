@@ -94,37 +94,57 @@ class hue:
                  sqls,
                  database="default",
                  n_jobs=3,
-                 wait_sec=3,
-                 sync=True):
+                 wait_sec=0,
+                 sync=True,
+                 progressbar=False
+                 ):
         """
         run concurrent hiveql using Hue Notebook api.
 
         :param sqls: iterable instance of sql strings
         :param database: string, default "default", database name
-        :param n_jobs: number of concurrent queries to run, recommend not greater than 3,
+        :param n_jobs: number of concurrent queries to run, it is recommended not greater than 4,
                        otherwise it would sometimes causes "Too many opened sessions" error
-        :param wait_sec: wait seconds between each submission of query
-        :param sync: whether to wait for all queries to complete
+        :param wait_sec: wait seconds between submission of query
+        :param sync: whether to wait for all queries to complete execution
+        :param progressbar: whether to show progress bar during waiting
         :return: list of NotebookResults
         """
 
+        # setup logging level
+        if progressbar:
+            verbose = False
+        else:
+            verbose = self.hue_sys.verbose
+
         while len(self.notebook_workers) < len(sqls):
-            self.notebook_workers.append(self.hue_sys
-                                         .new_notebook(self.name + f"-worker-{len(self.notebook_workers)}",
-                                                       self.description,
-                                                       hive_settings=None,
-                                                       recreate_session=False,
-                                                       verbose=self.hue_sys.verbose))
+            self.notebook_workers.append(
+                self.hue_sys.new_notebook(
+                    self.name + f"-worker-{len(self.notebook_workers)}",
+                    self.description,
+                    hive_settings=None,
+                    recreate_session=False,
+                    verbose=verbose)
+            )
+        for worker in self.notebook_workers:
+            logger.set_log_level(worker.log, verbose=verbose)
+
+        # go for concurrent sql run
         d_future = {}
         lst_result = [None] * len(sqls)
         i = 0
         while i < len(sqls) or len(d_future) > 0:
+            # check and collect completed results
             for notebook, idx in list(d_future.items()):
+                result = notebook._result
                 try:
-                    if sync and not notebook._result.is_ready():
+                    result.check_status()
+                    if progressbar:
+                        result.update_progressbar()
+                    if sync and not result.is_ready():
                         continue
 
-                    lst_result[idx] = notebook._result
+                    lst_result[idx] = result
                     del d_future[notebook]
                 except Exception as e:
                     self.log.warning(e)
@@ -135,13 +155,16 @@ class hue:
                         f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}")
                     del d_future[notebook]
 
+            # add task to job pool when not full
             while i < len(sqls) and (len(d_future) < n_jobs or not sync):
                 worker = self.notebook_workers[i]
                 try:
-                    worker.execute(sqls[i],
-                                   database=database,
-                                   sync=False)
+                    result = worker.execute(sqls[i],
+                                            database=database,
+                                            sync=False)
                     d_future[worker] = i
+                    if progressbar:
+                        result.update_progressbar(position=i)
                 except Exception as e:
                     self.log.warning(e)
                     self.log.warning(
@@ -152,6 +175,10 @@ class hue:
                     i += 1
 
             time.sleep(wait_sec)
+
+        for worker in self.notebook_workers:
+            if hasattr(worker, "_result") and worker._result._progressbar is not None:
+                worker._result._progressbar.close()
 
         return lst_result
 
