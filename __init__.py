@@ -3,10 +3,11 @@
 """
 import time
 import logging
+from tqdm.auto import tqdm
 import pandas as pd
 
 from .hue import Notebook
-from .settings import MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS
+from .settings import MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR
 from .hue_download import HueDownload
 from . import logger
 
@@ -61,6 +62,7 @@ class hue:
                 database: str = "default",
                 sync=True,
                 print_log: bool = False,
+                progressbar: bool = True,
                 new_notebook=False):
         """
         sql 查询语句
@@ -85,7 +87,11 @@ class hue:
         else:
             nb = self.hue_sys
 
-        return nb.execute(sql, database, print_log, sync)
+        return nb.execute(sql,
+                          database=database,
+                          print_log=print_log,
+                          progressbar=progressbar,
+                          sync=sync)
 
     def run_notebook_sql(self, *args, **kwargs):
         return self.run_sql(*args, **kwargs)
@@ -95,8 +101,8 @@ class hue:
                  database="default",
                  n_jobs=3,
                  wait_sec=0,
-                 sync=True,
-                 progressbar=False
+                 progressbar=True,
+                 sync=True
                  ):
         """
         run concurrent hiveql using Hue Notebook api.
@@ -106,8 +112,8 @@ class hue:
         :param n_jobs: number of concurrent queries to run, it is recommended not greater than 4,
                        otherwise it would sometimes causes "Too many opened sessions" error
         :param wait_sec: wait seconds between submission of query
-        :param sync: whether to wait for all queries to complete execution
         :param progressbar: whether to show progress bar during waiting
+        :param sync: whether to wait for all queries to complete execution
         :return: list of NotebookResults
         """
 
@@ -126,13 +132,19 @@ class hue:
                     recreate_session=False,
                     verbose=verbose)
             )
-        for worker in self.notebook_workers:
-            logger.set_log_level(worker.log, verbose=verbose)
 
         # go for concurrent sql run
+        i = 0
         d_future = {}
         lst_result = [None] * len(sqls)
-        i = 0
+        # setup progressbar
+        lst_pbar = []
+        if progressbar:
+            setup = PROGRESSBAR.copy()
+            for i, worker in enumerate(self.notebook_workers):
+                setup["desc"] = PROGRESSBAR["desc"].format(name=worker.name, result="result")
+                lst_pbar.append(tqdm(position=i, **setup))
+
         while i < len(sqls) or len(d_future) > 0:
             # check and collect completed results
             for notebook, idx in list(d_future.items()):
@@ -140,7 +152,7 @@ class hue:
                 try:
                     result.check_status()
                     if progressbar:
-                        result.update_progressbar()
+                        result.update_progressbar(result._progressbar)
                     if sync and not result.is_ready():
                         continue
 
@@ -155,7 +167,7 @@ class hue:
                         f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}")
                     del d_future[notebook]
 
-            # add task to job pool when not full
+            # add task to job pool when vacant
             while i < len(sqls) and (len(d_future) < n_jobs or not sync):
                 worker = self.notebook_workers[i]
                 try:
@@ -164,7 +176,7 @@ class hue:
                                             sync=False)
                     d_future[worker] = i
                     if progressbar:
-                        result.update_progressbar(position=i)
+                        result._progressbar = lst_pbar[i]
                 except Exception as e:
                     self.log.warning(e)
                     self.log.warning(
@@ -176,9 +188,9 @@ class hue:
 
             time.sleep(wait_sec)
 
-        for worker in self.notebook_workers:
-            if hasattr(worker, "_result") and worker._result._progressbar is not None:
-                worker._result._progressbar.close()
+        if progressbar:
+            for pbar in lst_pbar:
+                pbar.close()
 
         return lst_result
 

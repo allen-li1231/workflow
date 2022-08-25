@@ -1,3 +1,5 @@
+import sys
+
 HUE_BASE_URL = "http://10.19.185.29:8889"
 
 HUE_DOWNLOAD_BASE_URL = "http://10.19.185.103:8000"
@@ -69,4 +71,13 @@ HIVE_PERFORMANCE_SETTINGS = {
     # let spark app wait longer for executors' responses
     # "hive.spark.client.connect.timeout": "30000ms",
     # "hive.spark.client.server.connect.timeout": "300000ms"
+}
+
+PROGRESSBAR = {
+    "total": 100.,
+    "leave": True,
+    "bar_format": '{l_bar}{bar:25}|{elapsed}',
+    "desc": "NotebookResult[{name}] awaiting {result}",
+    "file": sys.stdout,
+    "ascii": True
 }

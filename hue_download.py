@@ -66,7 +66,6 @@ class HueDownload(requests.Session):
                           "Chrome/76.0.3809.100 Safari/537.36"
         })
         login_url = self.base_url + "/auth/login"
-        self.id_answer()
         form_data = dict(username=username,
                          password=password,
                          code=self.code,
@@ -91,6 +90,7 @@ class HueDownload(requests.Session):
             self._password = input("")
 
         self.log.debug(f"logging in for user [{self.username}]")
+        self.id_answer()
         res = self._login(self.username, self._password)
         r_json = res.json()
         if "status" in r_json.keys():

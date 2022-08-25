@@ -15,7 +15,7 @@ from unicodedata import normalize
 import requests
 
 from . import logger
-from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS
+from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR
 from .decorators import retry, ensure_login
 
 __all__ = ["Notebook", "Beeswax"]
@@ -427,6 +427,7 @@ class Notebook(requests.Session):
                 sql: str,
                 database: str = "default",
                 print_log: bool = False,
+                progressbar: bool = True,
                 sync=True):
         try:
             if hasattr(self, "snippet"):
@@ -450,7 +451,7 @@ class Notebook(requests.Session):
 
             self._result = NotebookResult(self)
             if sync:
-                self._result.await_result(print_log=print_log)
+                self._result.await_result(print_log=print_log, progressbar=progressbar)
 
             return self._result
         except KeyboardInterrupt:
@@ -630,8 +631,8 @@ class Notebook(requests.Session):
 
         return new_nb
 
-    @retry(__name__)
     @ensure_login
+    @retry(__name__)
     def _clear_history(self):
         self.log.info(f"clearing history")
         url = self.base_url + f'/notebook/api/clear_history/'
@@ -684,6 +685,8 @@ class NotebookResult(object):
         self.log = logging.getLogger(__name__ + f".NotebookResult[{self.name}]")
         logger.set_log_level(self.log, verbose=self.verbose)
 
+        self._progressbar_format = PROGRESSBAR.copy()
+        self._progressbar_format["desc"] = PROGRESSBAR["desc"].format(name=self.name, result="result")
         self.data = None
         self.full_log = ""
         self._logs_row = 0
@@ -736,7 +739,7 @@ class NotebookResult(object):
 
         return status
 
-    def await_result(self, wait_sec: int = 0, print_log=False):
+    def await_result(self, wait_sec: int = 0, print_log=False, progressbar=True):
         start_time = time.perf_counter()
         while print_log:
             time.sleep(wait_sec)
@@ -749,37 +752,34 @@ class NotebookResult(object):
                 self.log.debug(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
                 return
 
+        if progressbar:
+            self._progressbar = tqdm(position=0, **self._progressbar_format)
+
         while True:
             time.sleep(wait_sec)
             self.check_status()
-            self.update_progressbar()
+            if progressbar:
+                self.update_progressbar(self._progressbar)
             if self.is_ready():
                 self.log.debug(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
+                if progressbar:
+                    self._progressbar.close()
                 return
 
-    def update_progressbar(self, position=0):
-        if self._progressbar is None:
-            self._progressbar = tqdm(total=100.,
-                                     position=position,
-                                     leave=True,
-                                     bar_format='{l_bar}{bar:25}|{elapsed}',
-                                     desc=f"NotebookResult[{self.name}] awaiting result",
-                                     file=sys.stdout,
-                                     ascii=True)
+    def update_progressbar(self, pbar):
+        desc = PROGRESSBAR["desc"].format(
+            name=self.name,
+            result=self._app_id if self._app_id else 'result')
+        pbar.set_description(desc)
+
         if self.is_ready():
-            self._progressbar.set_description(f"NotebookResult[{self.name}]"
-                                              f" awaiting {self._app_id if self._app_id else 'result'}")
-            self._progressbar.update(100. - self._progress)
+            pbar.update(100. - self._progress)
             self._progress = 100.
-            self._progressbar.close()
+            pbar.refresh()
         elif len(self._app_id) > 0:
-            self._progressbar.set_description(f"NotebookResult[{self.name}]"
-                                              f" awaiting {self._app_id}")
-            self._progressbar.update(self._update_progress(self._app_id))
+            pbar.update(self._update_progress(self._app_id))
         else:
-            self._progressbar.set_description(f"NotebookResult[{self.name}]"
-                                              f" awaiting result")
-            self._progressbar.update(0.)
+            pbar.update(0.)
 
     @retry(__name__)
     def _fetch_result(self, rows: int = None, start_over=False):
