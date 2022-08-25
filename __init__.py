@@ -17,7 +17,7 @@ __all__ = ["hue", "Notebook", "HueDownload"]
 class hue:
     def __init__(self, username: str, password: str = None,
                  name="", description="",
-                 hive_settings=HIVE_PERFORMANCE_SETTINGS,
+                 hive_settings=None,
                  verbose=False):
 
         # global hue_sys, download
@@ -27,7 +27,8 @@ class hue:
 
         self.name = name
         self.description = description
-        self.hive_settings = hive_settings
+        self.hive_settings = HIVE_PERFORMANCE_SETTINGS.copy() \
+            if hive_settings is None else hive_settings
         self.verbose = verbose
 
         self._set_log(verbose)
@@ -73,8 +74,10 @@ class hue:
                          default to 'default'
         :param sync: whether to wait for sql to complete
                      default to True
-        :param print_log: whether to print Yarn log during waiting
+        :param print_log: whether to print cloud during waiting
                           default to False
+        :param progressbar: whether to print progressbar during waiting
+                          default to True
         :param new_notebook: whether to initialize a new notebook
                              default to False
         :return: hue.NotebookResult, which handles result of corresponding sql
@@ -140,10 +143,6 @@ class hue:
         # setup progressbar
         lst_pbar = []
         setup = PROGRESSBAR.copy()
-        if progressbar:
-            for pos, worker in enumerate(self.notebook_workers):
-                setup["desc"] = PROGRESSBAR["desc"].format(name=worker.name, result="result")
-                lst_pbar.append(tqdm(position=pos, **setup))
 
         while i < len(sqls) or len(d_future) > 0:
             # check and collect completed results
@@ -176,7 +175,9 @@ class hue:
                                             sync=False)
                     d_future[worker] = i
                     if progressbar:
-                        result._progressbar = lst_pbar[i]
+                        setup["desc"] = PROGRESSBAR["desc"].format(name=worker.name, result="result")
+                        result._progressbar = tqdm(position=i, **setup)
+
                 except Exception as e:
                     self.log.warning(e)
                     self.log.warning(
@@ -337,13 +338,14 @@ class hue:
             return uploaded_table
 
     def get_table(self,
-                  table,
+                  table: str,
                   database: str = "default",
-                  columns=None,
+                  columns: list = None,
                   decrypt_columns: list = None,
-                  print_log: bool = False):
+                  print_log: bool = False
+                  ):
         """
-        get data from Hue to local (ei
+        get data from Hue to local as pandas dataframe
         :param table: table name on Hue
         :param columns: iterable instance of string of column names
                         default to all columns

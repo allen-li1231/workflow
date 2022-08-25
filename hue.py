@@ -5,7 +5,6 @@ import json
 from tqdm.auto import tqdm
 import logging
 import os
-import sys
 import time
 import traceback
 import uuid
@@ -15,7 +14,7 @@ from unicodedata import normalize
 import requests
 
 from . import logger
-from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR
+from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR, YARN_BASE_URL
 from .decorators import retry, ensure_login
 
 __all__ = ["Notebook", "Beeswax"]
@@ -26,12 +25,8 @@ class Beeswax(requests.Session):
                  username: str = None,
                  password: str = None,
                  base_url: str = None,
-                 hive_settings=HIVE_PERFORMANCE_SETTINGS,
+                 hive_settings=None,
                  verbose: bool = False):
-
-        self.hive_settings = hive_settings
-        self.verbose = verbose
-
         self.log = logging.getLogger(__name__ + f".Beeswax")
         logger.set_log_level(self.log, verbose=verbose)
 
@@ -43,6 +38,9 @@ class Beeswax(requests.Session):
         self.is_logged_in = False
         self.username = username
         self._password = password
+        self.hive_settings = hive_settings
+        self._set_hive(self.hive_settings)
+        self.verbose = verbose
 
         super(Beeswax, self).__init__()
 
@@ -95,6 +93,20 @@ class Beeswax(requests.Session):
             self.headers["X-CSRFToken"] = self.cookies['csrftoken']
             self.headers["Content-Type"] = "application/x-www-form-urlencoded; " \
                                            "charset=UTF-8"
+
+    def _set_hive(self, hive_settings):
+        self.log.debug("setting up hive job")
+        if hive_settings is not None and not isinstance(hive_settings, dict):
+            raise TypeError("hive_settings should be None or instance of dict")
+
+        if hive_settings is None:
+            self.hive_settings = HIVE_PERFORMANCE_SETTINGS.copy()
+        else:
+            self.hive_settings = hive_settings
+
+        if hasattr(self, "snippet"):
+            self.snippet["properties"]["settings"] = \
+                [{"key": k, "value": v} for k, v in self.hive_settings.items()]
 
     def execute(self, query, database='buffer_fk', approx_time=5, attempt_times=100):
         self.log.debug(f"beeswax sending query: {query[: MAX_LEN_PRINT_SQL]}")
@@ -210,6 +222,7 @@ class Notebook(requests.Session):
         self.log = logging.getLogger(__name__ + f".Notebook[{name}]")
         logger.set_log_level(self.log, verbose=verbose)
 
+        self._set_hive(self.hive_settings)
         if base_url is None:
             self.base_url = HUE_BASE_URL
         else:
@@ -346,7 +359,7 @@ class Notebook(requests.Session):
             raise TypeError("hive_settings should be None or instance of dict")
 
         if hive_settings is None:
-            self.hive_settings = HIVE_PERFORMANCE_SETTINGS
+            self.hive_settings = HIVE_PERFORMANCE_SETTINGS.copy()
         else:
             self.hive_settings = hive_settings
 
@@ -694,8 +707,10 @@ class NotebookResult(object):
         self._app_id = ''
         self._progress = 0.
         self._progressbar = None
+        self._progressor = self._progress_updater()
 
         self._notebook = notebook
+        self._state_map = {'UNDEFINED': 'running', 'SUCCEEDED': 'available', 'FAILED': 'failed', 'KILLED': 'killed'}
         # the proxy might fail to respond when the response body becomes too large
         # manually set it smaller if so
         self.rows_per_fetch = 32768
@@ -703,43 +718,34 @@ class NotebookResult(object):
     def is_ready(self):
         return self.snippet["status"] == "available"
 
-    @retry(__name__)
-    def _check_status(self):
-        url = self.base_url + "/notebook/api/check_status"
-        res = self._notebook.post(url,
-                                  data={"notebook": json.dumps({"id": self.notebook["uuid"]})}
-                                  )
-        self.log.debug(f"_check status response: {res.text}")
-        return res
-
     def check_status(self, return_log=False):
         self.log.info(f"checking {'yarn app: ' + self._app_id if len(self._app_id) else 'status'}")
+        if len(self._app_id) > 0:
+            r_json = self._get_app_info(self._app_id).json()
+            if 'message' in r_json:
+                self.log.warning(r_json["message"])
+                self.log.warning(f"yarn cannot find {self._app_id}")
+                return 0.
 
-        res = self._check_status()
-        r_json = res.json()
+            r_json = r_json["app"]
+            status = self._state_map[r_json["finalStatus"]]
+            self.snippet["status"] = status
+            self._progress = r_json["progress"]
 
         # fetch cloud log by default
         cloud_log = self.fetch_cloud_logs()
-        if r_json["status"] != 0:
-            if len(cloud_log) > 0:
-                self.log.exception(cloud_log)
-
-            if "message" in r_json:
-                raise RuntimeError(r_json["message"])
-            else:
-                raise RuntimeError(r_json)
-
-        status = r_json["query_status"]["status"]
-        self.snippet["status"] = status
-        if status != "running" and status != "available":
-            self.log.warning(f"query {status}")
+        if "ERROR" in cloud_log:
+            self.snippet["status"] = "failed"
+            self.log.exception(cloud_log)
+            raise RuntimeError(f"query failed")
+        elif "INFO  : OK" in cloud_log:
+            self.snippet["status"] = "available"
 
         if return_log:
             return cloud_log
+        return self.snippet["status"]
 
-        return status
-
-    def await_result(self, wait_sec: int = 0, print_log=False, progressbar=True):
+    def await_result(self, wait_sec: int = 1, print_log=False, progressbar=True):
         start_time = time.perf_counter()
         while print_log:
             time.sleep(wait_sec)
@@ -748,13 +754,12 @@ class NotebookResult(object):
             if len(cloud_log) > 0:
                 print(cloud_log)
 
-            if self.snippet["status"] == "available":
+            if self.is_ready():
                 self.log.debug(f"sql execution done in {time.perf_counter() - start_time:.2f} secs")
                 return
 
         if progressbar:
             self._progressbar = tqdm(position=0, **self._progressbar_format)
-
         while True:
             time.sleep(wait_sec)
             self.check_status()
@@ -766,26 +771,10 @@ class NotebookResult(object):
                     self._progressbar.close()
                 return
 
-    def update_progressbar(self, pbar, desc=None):
-        if desc is None:
-            desc = PROGRESSBAR["desc"].format(
-                name=self.name,
-                result=self._app_id if self._app_id else 'result')
-        pbar.set_description(desc)
-
-        if self.is_ready():
-            pbar.update(100. - self._progress)
-            self._progress = 100.
-            pbar.refresh()
-        elif len(self._app_id) > 0:
-            pbar.update(self._update_progress(self._app_id))
-        else:
-            pbar.update(0.)
-
     @retry(__name__)
     def _fetch_result(self, rows: int = None, start_over=False):
         self.log.debug(f"fetching result")
-        if not self.snippet["status"] == "available":
+        if not self.is_ready():
             raise AssertionError(f"result {self.snippet['status']}")
 
         url = self.base_url + f'/notebook/api/fetch_result_data/'
@@ -834,10 +823,9 @@ class NotebookResult(object):
         cloud_log = res.json()
         if "logs" not in cloud_log:
             if "message" in cloud_log:
-                self.log.warning(f"fetching_cloud_logs responses: {cloud_log['message']}")
+                self.log.exception(f"fetching_cloud_logs responses: {cloud_log['message']}")
             else:
-                self.log.warning(f"Could not parse logs from cloud response: {res.text}")
-            return ''
+                self.log.exception(f"Could not parse logs from cloud response: {res.text}")
 
         for i, job in enumerate(cloud_log["jobs"]):
             if job["started"] and not job["finished"]:
@@ -852,22 +840,22 @@ class NotebookResult(object):
 
         return cloud_log
 
-    def _update_progress(self, app_id: str):
-        res = self._get_app_info(app_id).json()
-        if 'message' in res:
-            self.log.warning(res["message"])
-            return 0.
-        elif 'uri' in res:
-            self.log.warning(f"cannot read {app_id} progress")
-            return 0.
+    def update_progressbar(self, pbar, desc=None):
+        if desc is None:
+            desc = PROGRESSBAR["desc"].format(
+                name=self.name,
+                result=self._app_id if self._app_id else 'result')
+        pbar.set_description(desc)
+        pbar.update(next(self._progressor))
 
-        progress = res["job"]["progress"]
-        if isinstance(progress, (float, int)):
-            self._progress, progress = progress, self._progress
-        elif isinstance(progress, str) and len(progress) == 0:
-            progress = self._progress
+    def _progress_updater(self):
+        last_progress, progress = 0, 0
+        while not self.is_ready():
+            last_progress, progress = progress, self._progress
+            yield progress - last_progress
 
-        return self._progress - progress
+        self._progress = 100.
+        yield self._progress - progress
 
     @property
     def app_id(self):
@@ -878,8 +866,8 @@ class NotebookResult(object):
 
     @retry(__name__)
     def _get_app_info(self, app_id):
-        url = self.base_url + f'/jobbrowser/jobs/{app_id}?format=json'
-        res = self._notebook.post(url)
+        url = YARN_BASE_URL + f"/ws/v1/cluster/apps/{app_id}"
+        res = self._notebook.get(url)
         return res
 
     @retry(__name__)

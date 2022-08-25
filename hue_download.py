@@ -33,7 +33,7 @@ class HueDownload(requests.Session):
         self._set_log(verbose)
 
         self.log.debug("loading img_dict")
-        self.benchmark_imgs = np.load(r"W:\Python3\Lib\site-packages\wx_custom\img_dict.npy", allow_pickle=True).item()
+        self.benchmark_imgs = np.load(os.path.join(os.path.dirname(__file__), "img_dict.npy"), allow_pickle=True).item()
         super(HueDownload, self).__init__()
 
         self.login(self.username, self._password)
@@ -245,7 +245,7 @@ class HueDownload(requests.Session):
             table=table,
             reason=reason,
             columns=columns,
-            column_names=column_names or [],
+            column_names=','.join(column_names) if column_names else '',
             decrypt_columns=decrypt_columns or [],
             limit=limit)
         r_json = res.json()
@@ -474,8 +474,8 @@ class HueDownload(requests.Session):
                   table: str,
                   reason: str,
                   columns: list,
-                  column_names: list,
-                  decrypt_columns,
+                  column_names: str,
+                  decrypt_columns: list,
                   limit: int
                   ):
 
@@ -484,7 +484,7 @@ class HueDownload(requests.Session):
         self.headers['Content-Type'] = 'application/json'
 
         res = self.post(url, data=json.dumps({
-            "columnsInfo": ','.join(column_names),
+            "columnsInfo": column_names,
             "downloadColumns": columns,
             "downloadDecryptionColumns": decrypt_columns,
             "downloadLimit": str(limit) if limit else '',
@@ -636,14 +636,16 @@ class HueDownload(requests.Session):
         return result
 
     @retry(__name__)
-    def get_img(self):
+    def _get_img(self):
         code_url = self.base_url + "/auth/code"
-        code = self.get(code_url).json()
+        res = self.get(code_url)
+        return res
+
+    def id_answer(self):
+        code = self._get_img().json()
         self.img = re.sub("data:image/png;base64,", "", code["img"]).replace("%0A", "\n")
         self.uuid = code["uuid"]
 
-    def id_answer(self):
-        self.get_img()
         self.base64_pil()
         self.img[self.img <= 180] = 0
         self.img[self.img > 180] = 1
