@@ -766,10 +766,11 @@ class NotebookResult(object):
                     self._progressbar.close()
                 return
 
-    def update_progressbar(self, pbar):
-        desc = PROGRESSBAR["desc"].format(
-            name=self.name,
-            result=self._app_id if self._app_id else 'result')
+    def update_progressbar(self, pbar, desc=None):
+        if desc is None:
+            desc = PROGRESSBAR["desc"].format(
+                name=self.name,
+                result=self._app_id if self._app_id else 'result')
         pbar.set_description(desc)
 
         if self.is_ready():

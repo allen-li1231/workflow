@@ -139,11 +139,11 @@ class hue:
         lst_result = [None] * len(sqls)
         # setup progressbar
         lst_pbar = []
+        setup = PROGRESSBAR.copy()
         if progressbar:
-            setup = PROGRESSBAR.copy()
-            for i, worker in enumerate(self.notebook_workers):
+            for pos, worker in enumerate(self.notebook_workers):
                 setup["desc"] = PROGRESSBAR["desc"].format(name=worker.name, result="result")
-                lst_pbar.append(tqdm(position=i, **setup))
+                lst_pbar.append(tqdm(position=pos, **setup))
 
         while i < len(sqls) or len(d_future) > 0:
             # check and collect completed results
