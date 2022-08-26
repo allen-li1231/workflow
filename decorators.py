@@ -33,8 +33,11 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
             while i < attempts:
                 try:
                     res = func(self, *args, **kwargs)
-                    text = res.text if len(res.text) <= 250 else res.text[:250] + "..."
-                    logger.debug(f"response {i}/{attempts} attempts: {text}")
+                    if isinstance(res, requests.models.Response):
+                        text = res.text if len(res.text) <= 250 else res.text[:250] + "..."
+                        logger.debug(f"response {i}/{attempts} attempts: {text}")
+                    else:
+                        logger.debug(f"{i}/{attempts} attempts")
 
                 except (KeyboardInterrupt, AssertionError, RuntimeError) as e:
                     raise e
@@ -46,10 +49,14 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
                     time.sleep(wait_sec)
                     continue
 
-                if res.status_code == 200 or res.status_code == 201:
+                if not isinstance(res, requests.models.Response) \
+                        or res.status_code == 200 or res.status_code == 201:
                     return res
 
-                logger.warning(f"response error in {i}/{attempts} attempts: {text}")
+                if isinstance(res, requests.models.Response):
+                    logger.warning(f"response error in {i}/{attempts} attempts: {text}")
+                else:
+                    logger.warning(f"return error in {i}/{attempts} attempts")
                 if func.__name__ == "_fetch_result" \
                         and "Proxy Error" in res.text:
                     error_msg = "the proxy server is down. " \

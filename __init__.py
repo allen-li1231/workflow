@@ -105,6 +105,7 @@ class hue:
                  n_jobs=3,
                  wait_sec=0,
                  progressbar=True,
+                 progressbar_offset=0,
                  sync=True
                  ):
         """
@@ -116,6 +117,7 @@ class hue:
                        otherwise it would sometimes causes "Too many opened sessions" error
         :param wait_sec: wait seconds between submission of query
         :param progressbar: whether to show progress bar during waiting
+        :param progressbar_offset: use this parameter to control sql progressbar positions
         :param sync: whether to wait for all queries to complete execution
         :return: list of NotebookResults
         """
@@ -176,7 +178,7 @@ class hue:
                     d_future[worker] = i
                     if progressbar:
                         setup["desc"] = PROGRESSBAR["desc"].format(name=worker.name, result="result")
-                        result._progressbar = tqdm(position=i, **setup)
+                        result._progressbar = tqdm(position=i + progressbar_offset, **setup)
 
                 except Exception as e:
                     self.log.warning(e)

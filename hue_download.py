@@ -641,6 +641,7 @@ class HueDownload(requests.Session):
         res = self.get(code_url)
         return res
 
+    @retry(__name__)
     def id_answer(self):
         code = self._get_img().json()
         self.img = re.sub("data:image/png;base64,", "", code["img"]).replace("%0A", "\n")

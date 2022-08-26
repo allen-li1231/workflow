@@ -76,8 +76,9 @@ HIVE_PERFORMANCE_SETTINGS = {
 }
 
 PROGRESSBAR = {
+    "disable": False,
     "total": 100.,
-    "leave": True,
+    "leave": None,
     "bar_format": '{l_bar}{bar:25}|{elapsed}',
     "desc": "NotebookResult[{name}] awaiting {result}",
     "file": sys.stdout,
