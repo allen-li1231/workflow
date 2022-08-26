@@ -710,7 +710,6 @@ class NotebookResult(object):
         self._progressor = self._progress_updater()
 
         self._notebook = notebook
-        self._state_map = {'UNDEFINED': 'running', 'SUCCEEDED': 'available', 'FAILED': 'failed', 'KILLED': 'killed'}
         # the proxy might fail to respond when the response body becomes too large
         # manually set it smaller if so
         self.rows_per_fetch = 32768
@@ -718,28 +717,50 @@ class NotebookResult(object):
     def is_ready(self):
         return self.snippet["status"] == "available"
 
+    @retry(__name__)
+    def _check_status(self):
+        url = self.base_url + "/notebook/api/check_status"
+        res = self._notebook.post(url,
+                                  data={"notebook": json.dumps({"id": self.notebook["uuid"]})}
+                                  )
+        self.log.debug(f"_check status response: {res.text}")
+        return res
+
     def check_status(self, return_log=False):
         self.log.info(f"checking {'yarn app: ' + self._app_id if len(self._app_id) else 'status'}")
         if len(self._app_id) > 0:
             r_json = self._get_app_info(self._app_id).json()
             if 'message' in r_json:
-                self.log.warning(r_json["message"])
                 self.log.warning(f"yarn cannot find {self._app_id}")
-                return 0.
+                return self.snippet["status"]
 
             r_json = r_json["app"]
-            status = self._state_map[r_json["finalStatus"]]
-            self.snippet["status"] = status
             self._progress = r_json["progress"]
 
         # fetch cloud log by default
         cloud_log = self.fetch_cloud_logs()
+        # call _check_status api only when the result has final status
         if "ERROR" in cloud_log:
-            self.snippet["status"] = "failed"
             self.log.exception(cloud_log)
-            raise RuntimeError(f"query failed")
-        elif "INFO  : OK" in cloud_log:
-            self.snippet["status"] = "available"
+        elif "INFO  : OK" not in cloud_log:
+            if return_log:
+                return cloud_log
+            else:
+                return self.snippet["status"]
+
+        # session won't quit if this api is not called, causing "Too many opened session" error
+        r_json = self._check_status().json()
+        if r_json["status"] != 0:
+            if len(cloud_log) > 0:
+                self.log.exception(cloud_log)
+
+            if "message" in r_json:
+                raise RuntimeError(r_json["message"])
+            else:
+                raise RuntimeError(r_json)
+
+        status = r_json["query_status"]["status"]
+        self.snippet["status"] = status
 
         if return_log:
             return cloud_log
