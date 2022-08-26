@@ -262,11 +262,11 @@ class hue:
 
         params = [tables,
                   [reasons] * len(tables) if isinstance(reasons, str) else reasons,
-                  [None] if columns is None else columns,
-                  [None] if column_names is None else column_names,
-                  [None] if decrypt_columns is None else decrypt_columns,
-                  [None] if limit is None else limit,
-                  [None] if path is None else path,
+                  [None] * len(tables) if columns is None else columns,
+                  [None] * len(tables) if column_names is None else column_names,
+                  [None] * len(tables) if decrypt_columns is None else decrypt_columns,
+                  [None] * len(tables) if limit is None else limit,
+                  [None] * len(tables) if path is None else path,
                   ]
 
         lst_result = []
