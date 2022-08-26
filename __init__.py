@@ -1,9 +1,11 @@
 """
 @Author: 李中豪    supermrli@hotmail.com
 """
+import os
 import time
 import logging
 from tqdm.auto import tqdm
+from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 
 from .hue import Notebook
@@ -246,6 +248,41 @@ class hue:
             path,
             wait_sec,
             timeout)
+
+    def batch_download(self,
+                       tables: list,
+                       reasons: str,
+                       columns: list = None,
+                       column_names: list = None,
+                       decrypt_columns: list = None,
+                       limit: int = None,
+                       path: list = None,
+                       n_jobs: int = 3
+                       ):
+
+        params = [tables,
+                  [reasons] * len(tables) if isinstance(reasons, str) else reasons,
+                  [None] if columns is None else columns,
+                  [None] if column_names is None else column_names,
+                  [None] if decrypt_columns is None else decrypt_columns,
+                  [None] if limit is None else limit,
+                  [None] if path is None else path,
+                  ]
+
+        lst_result = []
+        th = ThreadPoolExecutor(max_workers=n_jobs)
+        for table, reason, columns, column_names, decrypt_columns, limit, path \
+                in zip(params):
+            lst_result.append(th.submit(self.download,
+                                        table=table,
+                                        reason=reason,
+                                        columns=columns,
+                                        column_names=column_names,
+                                        decrypt_columns=decrypt_columns,
+                                        limit=limit,
+                                        path=path)
+                              )
+        return [res.result() for res in lst_result]
 
     def upload_data(self, file_path, reason, column_names='1', encrypt_columns='', table_name=None):
         """
