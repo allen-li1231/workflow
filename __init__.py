@@ -272,7 +272,7 @@ class hue:
         lst_result = []
         th = ThreadPoolExecutor(max_workers=n_jobs)
         for table, reason, cols, col_names, decrypt_cols, lmt, pth \
-                in zip(params):
+                in zip(*params):
             lst_result.append(th.submit(self.download,
                                         table=table,
                                         reason=reason,
