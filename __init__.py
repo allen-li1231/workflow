@@ -5,7 +5,7 @@ import os
 import time
 import logging
 from tqdm.auto import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 
 from .hue import Notebook
@@ -292,6 +292,7 @@ class hue:
 
             lst_result = [None] * len(lst_future)
             while any(result is None for result in lst_result):
+                time.sleep(1)
                 for i, future in enumerate(lst_future):
                     if lst_result[i] is None and not future.running():
                         lst_result[i] = future.result()
