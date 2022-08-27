@@ -125,11 +125,6 @@ class hue:
         """
 
         # setup logging level
-        if progressbar:
-            verbose = False
-        else:
-            verbose = self.hue_sys.verbose
-
         while len(self.notebook_workers) < len(sqls):
             self.notebook_workers.append(
                 self.hue_sys.new_notebook(
@@ -137,15 +132,13 @@ class hue:
                     self.description,
                     hive_settings=None,
                     recreate_session=False,
-                    verbose=verbose)
+                    verbose=self.hue_sys.verbose)
             )
 
         # go for concurrent sql run
         i = 0
         d_future = {}
         lst_result = [None] * len(sqls)
-        # setup progressbar
-        lst_pbar = []
         setup_pbar = PROGRESSBAR.copy()
 
         while i < len(sqls) or len(d_future) > 0:
@@ -194,8 +187,8 @@ class hue:
             time.sleep(wait_sec)
 
         if progressbar:
-            for pbar in lst_pbar:
-                pbar.close()
+            for result in lst_result:
+                result._progressbar.close()
 
         return lst_result
 
@@ -298,6 +291,9 @@ class hue:
                         lst_result[i] = future.result()
                         if progressbar:
                             pbar.update(1)
+
+                pbar.update(0)
+
         if progressbar:
             pbar.close()
         return lst_result
@@ -429,6 +425,8 @@ class hue:
                     df.to_excel("path", index=False, engine=EXCEL_ENGINE)
                 elif suffix == 'csv':
                     df.to_csv(path, index=False)
+                else:
+                    self.log.warning(f"data not saved, save type not understood: '{suffix}' in path '{path}'")
             return df
         elif reason is None:
             raise TypeError(f"must specify reason if there has column to be decrypted")
