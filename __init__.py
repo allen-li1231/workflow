@@ -422,7 +422,7 @@ class hue:
             if path:
                 suffix = os.path.basename(path).rpartition('.')[-1]
                 if suffix in ('xlsx', 'xls', 'xlsm'):
-                    df.to_excel("path", index=False, engine=EXCEL_ENGINE)
+                    df.to_excel(path, index=False, engine=EXCEL_ENGINE)
                 elif suffix == 'csv':
                     df.to_csv(path, index=False)
                 else:
