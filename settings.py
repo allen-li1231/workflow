@@ -1,4 +1,5 @@
 import sys
+import importlib.util
 
 HUE_BASE_URL = "http://10.19.185.29:8889"
 
@@ -77,10 +78,11 @@ HIVE_PERFORMANCE_SETTINGS = {
 
 PROGRESSBAR = {
     "disable": False,
-    "total": 100.,
     "leave": None,
     "bar_format": '{l_bar}{bar:25}|{elapsed}',
     "desc": "NotebookResult[{name}] awaiting {result}",
     "file": sys.stdout,
     "ascii": True
 }
+
+EXCEL_ENGINE = "xlsxwriter" if importlib.util.find_spec("xlsxwriter") else "openpyxl"

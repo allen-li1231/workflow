@@ -108,7 +108,7 @@ class Beeswax(requests.Session):
             self.snippet["properties"]["settings"] = \
                 [{"key": k, "value": v} for k, v in self.hive_settings.items()]
 
-    def execute(self, query, database='buffer_fk', approx_time=5, attempt_times=100):
+    def execute(self, query, database='default', approx_time=5, attempt_times=100):
         self.log.debug(f"beeswax sending query: {query[: MAX_LEN_PRINT_SQL]}")
         query_data = {
             'query-query': query,
@@ -118,7 +118,7 @@ class Beeswax(requests.Session):
             'functions-next_form_id': 0,
             'query-email_notify': False,
             'query-is_parameterized': True,
-            }
+        }
 
         self.headers["Referer"] = self.base_url + '/beeswax'
         execute_url = self.base_url + '/beeswax/api/query/execute/'
@@ -745,8 +745,7 @@ class NotebookResult(object):
         elif "INFO  : OK" not in cloud_log:
             if return_log:
                 return cloud_log
-            else:
-                return self.snippet["status"]
+            return self.snippet["status"]
 
         # session won't quit if this api is not called, causing "Too many opened session" error
         r_json = self._check_status().json()
@@ -780,7 +779,7 @@ class NotebookResult(object):
                 return
 
         if progressbar:
-            self._progressbar = tqdm(position=0, **self._progressbar_format)
+            self._progressbar = tqdm(total=100, position=0, **self._progressbar_format)
         while True:
             time.sleep(wait_sec)
             self.check_status()
@@ -806,7 +805,7 @@ class NotebookResult(object):
             "startOver": "true" if start_over else "false"
             }
 
-        res = self._notebook.post(url, data=payload)
+        res = self._notebook.post(url, data=payload, stream=True)
         return res
 
     def fetchall(self):

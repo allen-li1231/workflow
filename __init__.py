@@ -5,11 +5,11 @@ import os
 import time
 import logging
 from tqdm.auto import tqdm
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
 from .hue import Notebook
-from .settings import MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR
+from .settings import MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR, EXCEL_ENGINE
 from .hue_download import HueDownload
 from . import logger
 
@@ -63,9 +63,9 @@ class hue:
     def run_sql(self,
                 sql: str,
                 database: str = "default",
-                sync=True,
                 print_log: bool = False,
                 progressbar: bool = True,
+                sync=True,
                 new_notebook=False):
         """
         sql 查询语句
@@ -74,12 +74,12 @@ class hue:
         :param sql: query raw string to execute
         :param database: database on Hive
                          default to 'default'
-        :param sync: whether to wait for sql to complete
-                     default to True
         :param print_log: whether to print cloud during waiting
                           default to False
         :param progressbar: whether to print progressbar during waiting
                           default to True
+        :param sync: whether to wait for sql to complete
+                     default to True
         :param new_notebook: whether to initialize a new notebook
                              default to False
         :return: hue.NotebookResult, which handles result of corresponding sql
@@ -146,7 +146,7 @@ class hue:
         lst_result = [None] * len(sqls)
         # setup progressbar
         lst_pbar = []
-        setup = PROGRESSBAR.copy()
+        setup_pbar = PROGRESSBAR.copy()
 
         while i < len(sqls) or len(d_future) > 0:
             # check and collect completed results
@@ -179,8 +179,8 @@ class hue:
                                             sync=False)
                     d_future[worker] = i
                     if progressbar:
-                        setup["desc"] = PROGRESSBAR["desc"].format(name=worker.name, result="result")
-                        result._progressbar = tqdm(position=i + progressbar_offset, **setup)
+                        setup_pbar["desc"] = PROGRESSBAR["desc"].format(name=worker.name, result="result")
+                        result._progressbar = tqdm(total=100, position=i + progressbar_offset, **setup_pbar)
 
                 except Exception as e:
                     self.log.warning(e)
@@ -251,38 +251,55 @@ class hue:
 
     def batch_download(self,
                        tables: list,
-                       reasons: str,
+                       reasons: str = None,
                        columns: list = None,
                        column_names: list = None,
                        decrypt_columns: list = None,
-                       limit: int = None,
-                       path: list = None,
-                       n_jobs: int = 3
+                       paths: list = None,
+                       n_jobs: int = 5,
+                       progressbar: bool = True
                        ):
+        if decrypt_columns is not None \
+                and any(len(cols) for cols in decrypt_columns) \
+                and reasons is None:
+            raise TypeError("must specify reason if there has any table's column needs to decrypt")
 
         params = [tables,
-                  [reasons] * len(tables) if isinstance(reasons, str) else reasons,
+                  [reasons] * len(tables) if reasons is None or isinstance(reasons, str) else reasons,
                   [None] * len(tables) if columns is None else columns,
                   [None] * len(tables) if column_names is None else column_names,
                   [None] * len(tables) if decrypt_columns is None else decrypt_columns,
-                  [None] * len(tables) if limit is None else limit,
-                  [None] * len(tables) if path is None else path,
+                  [None] * len(tables) if paths is None else paths,
                   ]
 
-        lst_result = []
-        th = ThreadPoolExecutor(max_workers=n_jobs)
-        for table, reason, cols, col_names, decrypt_cols, lmt, pth \
-                in zip(*params):
-            lst_result.append(th.submit(self.download,
-                                        table=table,
-                                        reason=reason,
-                                        columns=cols,
-                                        column_names=col_names,
-                                        decrypt_columns=decrypt_cols,
-                                        limit=lmt,
-                                        path=pth)
-                              )
-        return [res.result() for res in lst_result]
+        lst_future = []
+        with ThreadPoolExecutor(max_workers=n_jobs) as executor:
+            for i, (table, reason, cols, col_names, decrypt_cols, path) \
+                    in enumerate(zip(*params)):
+                lst_future.append(executor.submit(
+                    self.get_table,
+                    table=table,
+                    reason=reason,
+                    columns=cols,
+                    column_names=col_names,
+                    decrypt_columns=decrypt_cols,
+                    path=path))
+
+            if progressbar:
+                setup_pbar = PROGRESSBAR.copy()
+                setup_pbar["desc"] = "batch downloading"
+                pbar = tqdm(total=len(lst_future), **setup_pbar)
+
+            lst_result = [None] * len(lst_future)
+            while any(result is None for result in lst_result):
+                for i, future in enumerate(lst_future):
+                    if lst_result[i] is None and not future.running():
+                        lst_result[i] = future.result()
+                        if progressbar:
+                            pbar.update(1)
+        if progressbar:
+            pbar.close()
+        return lst_result
 
     def upload_data(self, file_path, reason, column_names='1', encrypt_columns='', table_name=None):
         """
@@ -378,33 +395,49 @@ class hue:
 
     def get_table(self,
                   table: str,
-                  database: str = "default",
+                  reason: str = None,
                   columns: list = None,
+                  column_names: list = None,
                   decrypt_columns: list = None,
-                  print_log: bool = False
+                  path: str = None,
                   ):
         """
         get data from Hue to local as pandas dataframe
-        :param table: table name on Hue
+
+        :param table: str, table name on Hue
+        :param reason: str, upload reason
         :param columns: iterable instance of string of column names
                         default to all columns
-        :param database: string, default "default", database name
+        :param column_names: rename column names if needed
         :param decrypt_columns: columns to be decrypted
-        :param print_log: whether to print Yarn log during waiting
-                          default to False
+        :param path: default None, path to save table data, not to save table if None
         :return: Pandas.DataFrame
         """
-        if decrypt_columns is None:
+        if decrypt_columns is None or len(decrypt_columns) == 0:
             sql = f"select {','.join(columns) if columns else '*'} from {table};"
             res = self.run_sql(sql=sql,
-                               database=database,
-                               print_log=print_log)
-            return pd.DataFrame(**res.fetchall())
+                               progressbar=False,
+                               print_log=False,
+                               new_notebook=True)
+            df = pd.DataFrame(**res.fetchall())
+            if column_names:
+                df.columns = column_names
+            if path:
+                suffix = os.path.basename(path).rpartition('.')[-1]
+                if suffix in ('xlsx', 'xls', 'xlsm'):
+                    df.to_excel("path", index=False, engine=EXCEL_ENGINE)
+                elif suffix == 'csv':
+                    df.to_csv(path, index=False)
+            return df
+        elif reason is None:
+            raise TypeError(f"must specify reason if there has column to be decrypted")
         else:
             return self.download(table=table,
-                                 reason=table,
+                                 reason=reason,
                                  columns=columns,
-                                 decrypt_columns=decrypt_columns)
+                                 column_names=column_names,
+                                 decrypt_columns=decrypt_columns,
+                                 path=path)
 
     def kill_app(self, app_id):
         return self.hue_download.kill_app(app_id)

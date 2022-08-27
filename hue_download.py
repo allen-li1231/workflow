@@ -14,7 +14,7 @@ from PIL import Image
 from requests_toolbelt import MultipartEncoder
 import logging
 
-from .settings import HUE_DOWNLOAD_BASE_URL
+from .settings import HUE_DOWNLOAD_BASE_URL, EXCEL_ENGINE
 from .decorators import retry, ensure_login
 from . import logger
 
@@ -262,8 +262,10 @@ class HueDownload(requests.Session):
             download_info = self.get_info_by_id(download_id, info_type="download")
             if download_info["status"] == 0:
                 # status: submit
-                self.log.info(f"prepare {table} elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
+                self.log.info(f"\rprepare {table} elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
                 continue
+            if self.verbose:
+                print()
             if download_info["status"] == 1:
                 # status: failed
                 raise RuntimeError(error_msg)
@@ -274,6 +276,8 @@ class HueDownload(requests.Session):
                 self.log.exception(f"can't resolve download info: {download_info}")
                 raise RuntimeError(f"can't resolve download info: {download_info}")
 
+        if self.verbose:
+            print()
         self.log.exception(f"download {table} timed out")
         return TimeoutError(f"download {table} timed out")
 
@@ -447,21 +451,25 @@ class HueDownload(requests.Session):
         start_time = time.perf_counter()
         buffer = self._download_by_id(download_id)
         if path is None:
-            df = pd.read_csv(StringIO(buffer.text))
-            self.log.info(f"download finished in {time.perf_counter() - start_time:.3f}")
-            return df
+            return pd.read_csv(StringIO(buffer.text))
 
         if not isinstance(path, str):
-            raise TypeError("path should be string")
+            raise TypeError(f"path should be string, got {type(path)}")
 
-        if path.rpartition(".")[2] != "csv":
-            path += ".csv"
+        suffix = path.rpartition(".")[-1]
+        if suffix == "csv":
+            with open(path, "wb") as f:
+                for chunk in buffer.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            df = pd.read_csv(StringIO(buffer.text))
+        elif suffix in ("xlsx", "xls", "xlsm"):
+            df = pd.read_csv(StringIO(buffer.text))
+            df.to_excel(path, index=False, engine=EXCEL_ENGINE)
+        else:
+            raise TypeError(f"save format {suffix} not supported")
 
-        with open(path, "wb") as f:
-            for chunk in buffer.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        self.log.info(f"download finished in {time.perf_counter() - start_time:.3f}")
+        self.log.info(f"\rdownload finished in {time.perf_counter() - start_time:.3f}")
+        return df
 
     @retry(__name__)
     def _get_column(self, table_name):
