@@ -291,7 +291,7 @@ class hue:
                         if progressbar:
                             pbar.update(1)
 
-                pbar.update(0)
+                pbar.refresh()
 
         if progressbar:
             pbar.close()
@@ -410,6 +410,10 @@ class hue:
         :return: Pandas.DataFrame
         """
         if path:
+            dir_ = os.path.dirname(path)
+            if not os.path.exists(dir_):
+                self.log.exception(f"directory '{dir_}' does not exist")
+                raise NotADirectoryError(f"directory '{dir_}' does not exist")
             suffix = os.path.basename(path).rpartition('.')[-1]
             if suffix not in ('xlsx', 'csv', 'xls', 'xlsm'):
                 self.log.exception(f"data type not understood: '{suffix}' in path '{path}'")
