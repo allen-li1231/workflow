@@ -473,6 +473,7 @@ class HueDownload(requests.Session):
 
     @retry(__name__)
     def _get_column(self, table_name):
+        self.log.debug(f"getting columns for {table_name}")
         url = self.base_url + '/api/hive/getColumns?tableName=' + table_name
         res = self.get(url)
         return res
@@ -487,6 +488,7 @@ class HueDownload(requests.Session):
                   limit: int
                   ):
 
+        self.log.debug(f"downloading {table}")
         url = self.base_url + '/api/downloadInfo'
         self.headers['Referer'] = 'http://10.19.185.103:8015/ud/downloadInfo'
         self.headers['Content-Type'] = 'application/json'
@@ -535,6 +537,7 @@ class HueDownload(requests.Session):
                            sort="id,desc"
                            ):
 
+        self.log.debug(f"getting download info")
         url = self.base_url + '/api/downloadInfo'
         res = self.get(url, params={
             "page": page,
@@ -550,6 +553,7 @@ class HueDownload(requests.Session):
                          sort="id,desc"
                          ):
 
+        self.log.debug(f"getting upload info")
         url = self.base_url + '/api/uploadInfo'
         res = self.get(url, params={
             "page": page,
@@ -560,6 +564,7 @@ class HueDownload(requests.Session):
 
     @retry(__name__)
     def _download_by_id(self, download_id: int):
+        self.log.debug(f"downloading by id {download_id}")
         url = self.base_url + '/api/downloadInfo/downloadData'
         res = self.get(
             url,
@@ -592,6 +597,7 @@ class HueDownload(requests.Session):
 
     @retry(__name__)
     def _kill_app(self, app_id: str):
+        self.log.debug(f"killing app {app_id}")
         url = self.base_url + '/api/killJobHist'
         res = self.post(url, data=json.dumps({
             "appId": app_id,

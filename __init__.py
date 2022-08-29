@@ -259,11 +259,10 @@ class hue:
 
         params = [tables,
                   [reasons] * len(tables) if reasons is None or isinstance(reasons, str) else reasons,
-                  [None] * len(tables) if columns is None else columns,
-                  [None] * len(tables) if column_names is None else column_names,
-                  [None] * len(tables) if decrypt_columns is None else decrypt_columns,
-                  [None] * len(tables) if paths is None else paths,
-                  ]
+                  columns if columns and any(columns) else [None] * len(tables),
+                  column_names if column_names and any(column_names) else [None] * len(tables),
+                  decrypt_columns if decrypt_columns and any(decrypt_columns) else [None] * len(tables),
+                  paths if paths and any(paths) else [None] * len(tables)]
 
         lst_future = []
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:
@@ -281,7 +280,7 @@ class hue:
             if progressbar:
                 setup_pbar = PROGRESSBAR.copy()
                 setup_pbar["desc"] = "batch downloading"
-                pbar = tqdm(total=len(lst_future), **setup_pbar)
+                pbar = tqdm(total=len(lst_future), miniters=0, **setup_pbar)
 
             lst_result = [None] * len(lst_future)
             while any(result is None for result in lst_result):
@@ -410,6 +409,12 @@ class hue:
         :param path: default None, path to save table data, not to save table if None
         :return: Pandas.DataFrame
         """
+        if path:
+            suffix = os.path.basename(path).rpartition('.')[-1]
+            if suffix not in ('xlsx', 'csv', 'xls', 'xlsm'):
+                self.log.exception(f"data type not understood: '{suffix}' in path '{path}'")
+                raise TypeError(f"data type not understood: '{suffix}' in path '{path}'")
+
         if decrypt_columns is None or len(decrypt_columns) == 0:
             sql = f"select {','.join(columns) if columns else '*'} from {table};"
             res = self.run_sql(sql=sql,
@@ -418,15 +423,16 @@ class hue:
                                new_notebook=True)
             df = pd.DataFrame(**res.fetchall())
             if column_names:
-                df.columns = column_names
+                if len(df.columns) != len(column_names):
+                    self.log.warning(f"length of table({len(df.columns)}) "
+                                     f"mismatch with column_names({len(column_names)}), skipped renaming")
+                else:
+                    df.columns = column_names
             if path:
-                suffix = os.path.basename(path).rpartition('.')[-1]
                 if suffix in ('xlsx', 'xls', 'xlsm'):
                     df.to_excel(path, index=False, engine=EXCEL_ENGINE)
                 elif suffix == 'csv':
                     df.to_csv(path, index=False)
-                else:
-                    self.log.warning(f"data not saved, save type not understood: '{suffix}' in path '{path}'")
             return df
         elif reason is None:
             raise TypeError(f"must specify reason if there has column to be decrypted")
