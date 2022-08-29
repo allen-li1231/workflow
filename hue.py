@@ -441,6 +441,7 @@ class Notebook(requests.Session):
                 database: str = "default",
                 print_log: bool = False,
                 progressbar: bool = True,
+                progressbar_offset: int = 0,
                 sync=True):
         try:
             if hasattr(self, "snippet"):
@@ -464,7 +465,9 @@ class Notebook(requests.Session):
 
             self._result = NotebookResult(self)
             if sync:
-                self._result.await_result(print_log=print_log, progressbar=progressbar)
+                self._result.await_result(print_log=print_log,
+                                          progressbar=progressbar,
+                                          progressbar_offset=progressbar_offset)
 
             return self._result
         except KeyboardInterrupt:
@@ -765,7 +768,7 @@ class NotebookResult(object):
             return cloud_log
         return self.snippet["status"]
 
-    def await_result(self, wait_sec: int = 1, print_log=False, progressbar=True):
+    def await_result(self, wait_sec: int = 1, print_log=False, progressbar=True, progressbar_offset=0):
         start_time = time.perf_counter()
         while print_log:
             time.sleep(wait_sec)
@@ -779,7 +782,7 @@ class NotebookResult(object):
                 return
 
         if progressbar:
-            self._progressbar = tqdm(total=100, position=0, **self._progressbar_format)
+            self._progressbar = tqdm(total=100, position=progressbar_offset, **self._progressbar_format)
         while True:
             time.sleep(wait_sec)
             self.check_status()
@@ -808,8 +811,20 @@ class NotebookResult(object):
         res = self._notebook.post(url, data=payload, stream=True)
         return res
 
-    def fetchall(self):
+    def fetchall(self, progressbar=True, total=None, progressbar_offset=0):
         self.log.info(f"fetching all")
+        if progressbar:
+            setup_progressbar = PROGRESSBAR.copy()
+            setup_progressbar["desc"] = setup_progressbar["desc"].format(
+                name=self.name,
+                result='fetchall')
+            if total is None:
+                setup_progressbar["bar_format"] = '{l_bar}{n_fmt}{unit}, {rate_fmt}{postfix} |{elapsed}'
+            pbar = tqdm(total=total,
+                        position=progressbar_offset,
+                        unit="rows",
+                        **setup_progressbar)
+
         res = self._fetch_result(start_over=True)
         res = res.json()["result"]
 
@@ -820,6 +835,9 @@ class NotebookResult(object):
 
         lst_metadata = [m["name"].rpartition(".")[2]
                         for m in res["meta"]]
+
+        if progressbar:
+            pbar.update(len(res["data"]))
 
         while res["has_more"]:
             res = self._fetch_result(start_over=False)
@@ -833,7 +851,11 @@ class NotebookResult(object):
                                   if isinstance(s, str) else s
                                   for s in row]
                                  for row in res["data"]])
+                if progressbar:
+                    pbar.update(len(res["data"]))
 
+        if progressbar:
+            pbar.close()
         self.data = {"data": lst_data, "columns": lst_metadata}
         return self.data
 

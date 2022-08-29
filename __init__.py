@@ -253,7 +253,8 @@ class hue:
                        decrypt_columns: list = None,
                        paths: list = None,
                        n_jobs: int = 5,
-                       progressbar: bool = True
+                       progressbar: bool = True,
+                       progressbar_offset: int = 0
                        ):
         if decrypt_columns is not None \
                 and any(len(cols) for cols in decrypt_columns) \
@@ -278,12 +279,14 @@ class hue:
                     columns=cols,
                     column_names=col_names,
                     decrypt_columns=decrypt_cols,
-                    path=path))
+                    path=path,
+                    progressbar=False)
+                )
 
             if progressbar:
                 setup_pbar = PROGRESSBAR.copy()
                 setup_pbar["desc"] = "batch downloading"
-                pbar = tqdm(total=len(lst_future), miniters=0, **setup_pbar)
+                pbar = tqdm(total=len(lst_future), miniters=0, position=progressbar_offset, **setup_pbar)
 
             lst_result = [None] * len(lst_future)
             while any(result is None for result in lst_result):
@@ -399,6 +402,8 @@ class hue:
                   column_names: list = None,
                   decrypt_columns: list = None,
                   path: str = None,
+                  progressbar: bool = True,
+                  progressbar_offset: int = 0
                   ):
         """
         get data from Hue to local as pandas dataframe
@@ -425,10 +430,15 @@ class hue:
         if decrypt_columns is None or len(decrypt_columns) == 0:
             sql = f"select {','.join(columns) if columns else '*'} from {table};"
             res = self.run_sql(sql=sql,
-                               progressbar=False,
+                               progressbar=progressbar,
+                               progressbar_offset=progressbar_offset,
                                print_log=False,
                                new_notebook=True)
-            df = pd.DataFrame(**res.fetchall())
+            table_size = (self.run_sql(f'show tblproperties {table}("numRows")',
+                                       progressbar=False,
+                                       print_log=False)
+                .fetchall()["data"][0][0])
+            df = pd.DataFrame(**res.fetchall(progressbar=False))
             if column_names:
                 if len(df.columns) != len(column_names):
                     self.log.warning(f"length of table({len(df.columns)}) "
