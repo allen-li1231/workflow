@@ -62,7 +62,7 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
                     error_msg = "the proxy server is down. " \
                                 "perhaps due to large result of sql query.\n" \
                                 "please hold a while and retry " \
-                                "by setting Notebook.rows_per_fetch smaller"
+                                "by setting NotebookResult.rows_per_fetch smaller"
                     logger.exception(error_msg)
                     raise RuntimeError(error_msg)
 
