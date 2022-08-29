@@ -415,6 +415,9 @@ class hue:
         :param column_names: rename column names if needed
         :param decrypt_columns: columns to be decrypted
         :param path: default None, path to save table data, not to save table if None
+        :param progressbar: whether to show progress bar during waiting
+        :param progressbar_offset: use this parameter to control sql progressbar positions
+
         :return: Pandas.DataFrame
         """
         if path:
@@ -437,8 +440,9 @@ class hue:
             table_size = (self.run_sql(f'show tblproperties {table}("numRows")',
                                        progressbar=False,
                                        print_log=False)
-                .fetchall()["data"][0][0])
-            df = pd.DataFrame(**res.fetchall(progressbar=False))
+                .fetchall(progressbar=False)["data"][0][0])
+            df = pd.DataFrame(**res.fetchall(total=int(table_size) if table_size.isdigit() else None,
+                                             progressbar=progressbar))
             if column_names:
                 if len(df.columns) != len(column_names):
                     self.log.warning(f"length of table({len(df.columns)}) "
