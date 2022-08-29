@@ -65,6 +65,7 @@ class hue:
                 database: str = "default",
                 print_log: bool = False,
                 progressbar: bool = True,
+                progressbar_offset: int = 0,
                 sync=True,
                 new_notebook=False):
         """
@@ -78,6 +79,7 @@ class hue:
                           default to False
         :param progressbar: whether to print progressbar during waiting
                           default to True
+        :param progressbar_offset: use this parameter to control sql progressbar positions
         :param sync: whether to wait for sql to complete
                      default to True
         :param new_notebook: whether to initialize a new notebook
@@ -96,6 +98,7 @@ class hue:
                           database=database,
                           print_log=print_log,
                           progressbar=progressbar,
+                          progressbar_offset=progressbar_offset,
                           sync=sync)
 
     def run_notebook_sql(self, *args, **kwargs):
