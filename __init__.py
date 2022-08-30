@@ -442,11 +442,12 @@ class hue:
                                        print_log=False)
                 .fetchall(progressbar=False)["data"][0][0])
             df = pd.DataFrame(**res.fetchall(total=int(table_size) if table_size.isdigit() else None,
-                                             progressbar=progressbar))
+                                             progressbar=progressbar,
+                                             progressbar_offset=progressbar_offset))
             if column_names:
                 if len(df.columns) != len(column_names):
-                    self.log.warning(f"length of table({len(df.columns)}) "
-                                     f"mismatch with column_names({len(column_names)}), skipped renaming")
+                    self.log.warning(f"length of table columns({len(columns)}) "
+                                     f"mismatch with column_names({len(column_names)}), rename skipped")
                 else:
                     df.columns = column_names
             if path:

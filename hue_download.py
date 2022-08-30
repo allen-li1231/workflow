@@ -240,6 +240,11 @@ class HueDownload(requests.Session):
             columns = self.get_column(table)
         if decrypt_columns is not None:
             columns = pd.unique(columns + decrypt_columns).tolist()
+        if column_names:
+            if len(columns) != len(column_names):
+                self.log.warning(f"length of table columns({len(columns)}) "
+                                 f"mismatch with column_names({len(column_names)}), rename skipped")
+                column_names = None
 
         res = self._download(
             table=table,
