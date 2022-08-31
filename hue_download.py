@@ -250,8 +250,7 @@ class HueDownload(requests.Session):
             table=table,
             reason=reason,
             columns=columns,
-            column_names=','.join(column_names) if column_names else '',
-            decrypt_columns=decrypt_columns or [],
+            decrypt_columns=decrypt_columns,
             limit=limit)
         r_json = res.json()
 
@@ -276,7 +275,7 @@ class HueDownload(requests.Session):
                 raise RuntimeError(error_msg)
             if download_info["status"] == 3:
                 # status: success
-                return self.download_by_id(download_id=download_id, path=path)
+                return self.download_by_id(download_id=download_id, path=path, column_names=column_names)
             else:
                 self.log.exception(f"can't resolve download info: {download_info}")
                 raise RuntimeError(f"can't resolve download info: {download_info}")
@@ -452,23 +451,36 @@ class HueDownload(requests.Session):
 
         raise LookupError(f"cannot get info with download id: {id_}")
 
-    def download_by_id(self, download_id, path=None):
+    def download_by_id(self, download_id, column_names=None, path=None):
         start_time = time.perf_counter()
         buffer = self._download_by_id(download_id)
         if path is None:
-            return pd.read_csv(StringIO(buffer.text))
+            df = pd.read_csv(StringIO(buffer.text))
+            if column_names:
+                df.columns = column_names
+
+            return df
 
         if not isinstance(path, str):
             raise TypeError(f"path should be string, got {type(path)}")
 
         suffix = path.rpartition(".")[-1]
         if suffix == "csv":
-            with open(path, "wb") as f:
-                for chunk in buffer.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            df = pd.read_csv(StringIO(buffer.text))
+            if column_names:
+                df = pd.read_csv(StringIO(buffer.text))
+                df.columns = column_names
+                df.to_csv(path, index=False)
+            else:
+                with open(path, "wb") as f:
+                    for chunk in buffer.iter_content(chunk_size=8192):
+                        f.write(chunk)
+
+                df = pd.read_csv(StringIO(buffer.text))
         elif suffix in ("xlsx", "xls", "xlsm"):
             df = pd.read_csv(StringIO(buffer.text))
+            if column_names:
+                df.columns = column_names
+
             df.to_excel(path, index=False, engine=EXCEL_ENGINE)
         else:
             raise TypeError(f"save format {suffix} not supported")
@@ -488,9 +500,9 @@ class HueDownload(requests.Session):
                   table: str,
                   reason: str,
                   columns: list,
-                  column_names: str,
-                  decrypt_columns: list,
-                  limit: int
+                  column_names: str = '',
+                  decrypt_columns: list = None,
+                  limit: int = ''
                   ):
 
         self.log.debug(f"downloading {table}")
@@ -501,7 +513,7 @@ class HueDownload(requests.Session):
         res = self.post(url, data=json.dumps({
             "columnsInfo": column_names,
             "downloadColumns": columns,
-            "downloadDecryptionColumns": decrypt_columns,
+            "downloadDecryptionColumns": decrypt_columns or [],
             "downloadLimit": str(limit) if limit else '',
             "downloadTable": table,
             "reason": reason
