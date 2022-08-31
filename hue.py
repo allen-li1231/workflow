@@ -797,9 +797,6 @@ class NotebookResult(object):
     @retry(__name__)
     def _fetch_result(self, rows: int = None, start_over=False):
         self.log.debug(f"fetching result")
-        if not self.is_ready():
-            raise AssertionError(f"result {self.snippet['status']}")
-
         url = self.base_url + f'/notebook/api/fetch_result_data/'
         payload = {
             "notebook": json.dumps(self.notebook),
@@ -813,6 +810,9 @@ class NotebookResult(object):
 
     def fetchall(self, progressbar=True, total=None, progressbar_offset=0):
         self.log.info(f"fetching all")
+        if not self.is_ready():
+            self.log.warning(f"result {self.snippet['status']}")
+
         if progressbar:
             setup_progressbar = PROGRESSBAR.copy()
             setup_progressbar["desc"] = setup_progressbar["desc"].format(

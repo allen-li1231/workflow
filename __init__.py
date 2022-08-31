@@ -3,6 +3,7 @@
 """
 import os
 import time
+from typing import Union
 import logging
 from tqdm.auto import tqdm
 from concurrent.futures import ThreadPoolExecutor
@@ -72,6 +73,7 @@ class hue:
         sql 查询语句
         database 选填，默认'default'
         sync 选填，True，是否异步执行sql
+
         :param sql: query raw string to execute
         :param database: database on Hive
                          default to 'default'
@@ -84,6 +86,7 @@ class hue:
                      default to True
         :param new_notebook: whether to initialize a new notebook
                              default to False
+
         :return: hue.NotebookResult, which handles result of corresponding sql
         """
         if new_notebook:
@@ -124,6 +127,7 @@ class hue:
         :param progressbar: whether to show progress bar during waiting
         :param progressbar_offset: use this parameter to control sql progressbar positions
         :param sync: whether to wait for all queries to complete execution
+
         :return: list of NotebookResults
         """
 
@@ -231,6 +235,7 @@ class hue:
                          default to 5 seconds
         :param timeout: maximum seconds to wait for the server preparation
                        default to wait indefinitely
+
         :return: Pandas.DataFrame if path is not specified,
                  otherwise output a csv file to path and return None
         """
@@ -247,7 +252,7 @@ class hue:
 
     def batch_download(self,
                        tables: list,
-                       reasons: str = None,
+                       reasons: Union[str, list] = None,
                        columns: list = None,
                        column_names: list = None,
                        decrypt_columns: list = None,
@@ -280,6 +285,7 @@ class hue:
                     column_names=col_names,
                     decrypt_columns=decrypt_cols,
                     path=path,
+                    new_notebook=True,
                     progressbar=False)
                 )
 
@@ -354,6 +360,7 @@ class hue:
         :param timeout: maximum seconds to wait for the server preparation
                        default to wait indefinitely
         :param table_name: str, user can nominate final table name
+
         :return: str, name of uploaded table
         """
         uploaded_table = self.hue_download.upload(data=data,
@@ -402,6 +409,7 @@ class hue:
                   column_names: list = None,
                   decrypt_columns: list = None,
                   path: str = None,
+                  new_notebook: bool = False,
                   progressbar: bool = True,
                   progressbar_offset: int = 0
                   ):
@@ -436,12 +444,15 @@ class hue:
                                progressbar=progressbar,
                                progressbar_offset=progressbar_offset,
                                print_log=False,
-                               new_notebook=True)
-            table_size = (self.run_sql(f'show tblproperties {table}("numRows")',
-                                       progressbar=False,
-                                       print_log=False)
-                .fetchall(progressbar=False)["data"][0][0])
-            df = pd.DataFrame(**res.fetchall(total=int(table_size) if table_size.isdigit() else None,
+                               new_notebook=new_notebook)
+            if progressbar:
+                table_size = (self.run_sql(f'show tblproperties {table}("numRows")',
+                                           progressbar=False,
+                                           progressbar_offset=progressbar_offset,
+                                           print_log=False,
+                                           new_notebook=new_notebook)
+                    .fetchall(progressbar=False)["data"][0][0])
+            df = pd.DataFrame(**res.fetchall(total=int(table_size) if progressbar and table_size.isdigit() else None,
                                              progressbar=progressbar,
                                              progressbar_offset=progressbar_offset))
             if column_names:
