@@ -12,7 +12,7 @@ def human_readable_size(size, decimal_places=2):
     return f"{size:.{decimal_places}f} {unit}"
 
 
-def reduce_mem_usage(df):
+def reduce_mem_usage(df: pd.DataFrame):
     """
         通过调整数据类型，帮助我们减少数据在内存中占用的空间
     """
@@ -50,7 +50,22 @@ def reduce_mem_usage(df):
                     df[col] = df[col].astype(np.float64)
         else:
             continue
-    end_mem = df.memory_usage().sum()
+    # end_mem = df.memory_usage().sum()
     #    print('Memory usage after optimization is: {:.2f} MB'.format(end_mem)) # 转化后占用内存
     #    print('Decreased by {:.1f}%'.format(100 * (start_mem - end_mem) / start_mem)) # 减少的内存
     return df
+
+
+def read_file_in_chunks(file_object, block_size, chunks=-1):
+    """Lazy function (generator) to read a file piece by piece.
+    Default chunk size: 25MB."""
+    i = 1
+    while chunks:
+        data = file_object.read(block_size)
+        if len(data) < block_size:
+            yield -1, data
+            return
+
+        yield i, data
+        i += 1
+        chunks -= 1

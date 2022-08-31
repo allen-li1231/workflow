@@ -1,20 +1,29 @@
 import os
 import base64
-import urllib
+import urllib.parse
 import json
-import requests
+import logging
+from tqdm.auto import tqdm
 
-JUPYTER_URL = 'http://10.19.181.26:9999/'
-TOKEN = "fengkong"
+from .base import JupyterBase
+from .. import logger
+from ..decorators import retry
+from ..utils import read_file_in_chunks
+
+__all__ = ["Jupyter"]
 
 
-def upload(file_path, dst_path):
-    """
+class Jupyter(JupyterBase):
+    def __init__(self, password=None, verbose=False):
+        super(Jupyter, self).__init__(password=password)
+        self.log = logging.getLogger(__name__ + f".Jupyter")
+        logger.set_log_level(self.log, verbose=verbose)
+
+    def upload(self, file_path, dst_path, progressbar=True, progressbar_offset=0):
+        """
         Uploads File to Jupyter Notebook Server
         ----------------------------------------
-        :param token:
-            The authorization token issued by Jupyter for authentification
-            (enabled by default as of version 4.3.0)
+
         :param file_path:
             The file path to the local content to be uploaded
 
@@ -22,39 +31,62 @@ def upload(file_path, dst_path):
             The path where resource should be placed.
             The destination directory must exist.
 
+        :param progressbar: whether to print progressbar during waiting
+                          default to True
+
+        :param progressbar_offset: use this parameter to control sql progressbar positions
+
         :return: server response
+        """
+        # default block size is 25MB
+        block_size = self.max_upload_size
+        dst_path = urllib.parse.quote(dst_path)
+        file_name = os.path.basename(file_path)
 
-    """
+        if progressbar:
+            file_size = os.path.getsize(file_path)
+            pbar = tqdm(total=file_size,
+                        desc=f"uploading {file_name}",
+                        unit="iB",
+                        unit_scale=True,
+                        unit_divisor=1024,
+                        position=progressbar_offset,
+                        **self._progressbar_format)
 
-    dst_path = urllib.parse.quote(dst_path)
-    dst_url = '%s/api/contents/%s' % (JUPYTER_URL, dst_path)
-    file_name = os.path.basename(file_path)
-    headers = {'Authorization': 'token ' + TOKEN}
+        with open(file_path, 'rb') as f:
+            for chunk, data in read_file_in_chunks(f, block_size=block_size):
+                res = self._upload(data=data,
+                                   file_name=file_name,
+                                   dst_path=dst_path,
+                                   chunk=chunk)
+                if progressbar:
+                    pbar.update(len(data))
 
-    # TODO: upload large files in chunks
-    # size_of_file = os.path.getsize(file_path) / 1024. / 1024.
-    # if size_of_file > 10
-    with open(file_path, 'r') as f:
-        data = f.read()
+        if progressbar:
+            pbar.close()
+        return res
 
-    data = base64.encodebytes(data)
-    body = json.dumps({
-        'content': data,
-        'name': file_name,
-        'path': dst_path,
-        'format': 'base64',
-        'type': 'file'
+    @retry(__name__)
+    def _upload(self, data, file_name, dst_path, chunk):
+        dst_url = urllib.parse.urljoin(self.base_url + "/api/contents/", dst_path)
+        dst_url = dst_url + file_name if dst_url.endswith('/') else dst_url + '/' + file_name
+
+        file_ext = file_name.rpartition('.')[-1]
+        if file_ext == "ipynb":
+            self.headers["Content-Type"] = "application/json"
+            file_type = 'notebook'
+        else:
+            self.headers["Content-Type"] = "application/octet-stream"
+            file_type = 'file'
+
+        data = base64.b64encode(data).decode("utf-8") + '=' * (4 - len(data) % 4)
+        body = json.dumps({
+            "chunk": chunk,
+            'content': data,
+            'name': file_name,
+            'path': dst_path,
+            'format': 'base64',
+            'type': file_type
         })
-    return requests.put(dst_url, data=body, headers=headers, verify=True)
-
-
-def _read_in_chunks(file_object, blocksize=1024 * 1024, chunks=-1):
-    """Lazy function (generator) to read a file piece by piece.
-    Default chunk size: 1k."""
-    while chunks:
-        data = file_object.read(blocksize)
-        if not data:
-            break
-
-        yield data
-        chunks -= 1
+        res = self.put(dst_url, data=body)
+        return res
