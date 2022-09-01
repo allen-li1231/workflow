@@ -197,7 +197,8 @@ class hue:
 
         if progressbar:
             for result in lst_result:
-                result._progressbar.close()
+                if hasattr(result, "_progressbar"):
+                    result._progressbar.close()
 
         return lst_result
 
