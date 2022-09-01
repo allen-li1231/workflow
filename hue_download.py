@@ -97,7 +97,7 @@ class HueDownload(requests.Session):
             if r_json["status"] == 400 and r_json["message"] == "验证码错误":
                 raise ConnectionError("captcha guess failed")
 
-            self.log.exception(res.text)
+            self.log.error(res.text)
             raise RuntimeError(r_json["message"])
 
         self.log.info('login succeeful [%s] at %s'
@@ -256,7 +256,7 @@ class HueDownload(requests.Session):
 
         error_msg = f"cannot download {table}, please check table name and (decrypt) columns"
         if r_json["status"] != 0:
-            self.log.exception(error_msg)
+            self.log.error(error_msg)
             raise RuntimeError(error_msg)
 
         download_id = r_json["id"]
@@ -277,12 +277,12 @@ class HueDownload(requests.Session):
                 # status: success
                 return self.download_by_id(download_id=download_id, path=path, column_names=column_names)
             else:
-                self.log.exception(f"can't resolve download info: {download_info}")
+                self.log.error(f"can't resolve download info: {download_info}")
                 raise RuntimeError(f"can't resolve download info: {download_info}")
 
         if self.verbose:
             print()
-        self.log.exception(f"download {table} timed out")
+        self.log.error(f"download {table} timed out")
         return TimeoutError(f"download {table} timed out")
 
     @ensure_login
@@ -340,12 +340,12 @@ class HueDownload(requests.Session):
                 continue
             if upload_info["status"] == 1:
                 # status: failed
-                self.log.exception(f"RuntimeError: cannot upload {file_path}")
+                self.log.error(f"RuntimeError: cannot upload {file_path}")
                 raise RuntimeError(error_msg)
             if upload_info['status'] == 3:
                 return upload_info['rsTable']
 
-        self.log.exception(f"upload {file_path} timed out")
+        self.log.error(f"upload {file_path} timed out")
         return TimeoutError(f"upload {file_path} timed out")
 
     def upload(self,
@@ -406,7 +406,7 @@ class HueDownload(requests.Session):
                           f" {','.join(set_encrypt_columns.difference(set_columns))}" \
                           f" not in {buffer.name}"
                 buffer.close()
-                self.log.exception(err_msg)
+                self.log.error(err_msg)
                 raise ValueError(err_msg)
 
         res = self._upload(file_buffer=buffer,
@@ -428,12 +428,12 @@ class HueDownload(requests.Session):
                 continue
             if upload_info["status"] == 1:
                 # status: failed
-                self.log.exception(f"RuntimeError: cannot upload {buffer.name}")
+                self.log.error(f"RuntimeError: cannot upload {buffer.name}")
                 raise RuntimeError(error_msg)
             if upload_info['status'] == 3:
                 return upload_info['rsTable']
 
-        self.log.exception(f"upload {buffer.name} timed out")
+        self.log.error(f"upload {buffer.name} timed out")
         return TimeoutError(f"upload {buffer.name} timed out")
 
     def get_info_by_id(self, id_: int, info_type, **kwargs):

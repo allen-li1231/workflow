@@ -84,8 +84,8 @@ class Beeswax(requests.Session):
 
         if res.status_code != 200 \
                 or f"var LOGGED_USERNAME = '';" in res.text:
-            self.log.exception('login failed for [%s] at %s'
-                               % (self.username, self.base_url))
+            self.log.error('login failed for [%s] at %s'
+                           % (self.username, self.base_url))
         else:
             self.log.info('login succeeful [%s] at %s'
                           % (self.username, self.base_url))
@@ -260,8 +260,8 @@ class Notebook(requests.Session):
         res = self._login()
         if res.status_code != 200 \
                 or f"var LOGGED_USERNAME = '';" in res.text:
-            self.log.exception('login failed for [%s] at %s'
-                               % (self.username, self.base_url))
+            self.log.error('login failed for [%s] at %s'
+                           % (self.username, self.base_url))
             self._password = None
         else:
             self.log.info('login succeeful [%s] at %s'
@@ -452,7 +452,7 @@ class Notebook(requests.Session):
 
             r_json = self._execute(sql).json()
             if r_json["status"] != 0:
-                self.log.exception(r_json["message"])
+                self.log.error(r_json["message"])
                 raise RuntimeError(r_json["message"])
 
             self.notebook["id"] = r_json["history_id"]
@@ -765,7 +765,7 @@ class NotebookResult(object):
         # call _check_status api only when the result has final status
         if "ERROR" in cloud_log:
             will_update_status = True
-            self.log.exception(cloud_log)
+            self.log.error(cloud_log)
         elif "INFO  : OK" in cloud_log:
             will_update_status = True
 
@@ -776,7 +776,7 @@ class NotebookResult(object):
             r_json = self._check_status().json()
             if r_json["status"] != 0:
                 if len(cloud_log) > 0:
-                    self.log.exception(cloud_log)
+                    self.log.error(cloud_log)
 
                 if "message" in r_json:
                     raise RuntimeError(r_json["message"])
@@ -890,7 +890,7 @@ class NotebookResult(object):
             if "message" in cloud_log:
                 self.log.warning(f"fetching_cloud_logs responses: {cloud_log['message']}")
             else:
-                self.log.exception(f"Could not parse logs from cloud response: {res.text}")
+                self.log.error(f"Could not parse logs from cloud response: {res.text}")
                 raise RuntimeError(f"Could not parse logs from cloud response: {res.text}")
 
         for i, job in enumerate(cloud_log["jobs"]):

@@ -40,7 +40,6 @@ class Jupyter(JupyterBase):
         """
         # default block size is 25MB
         block_size = self.max_upload_size
-        dst_path = urllib.parse.quote(dst_path)
         file_name = os.path.basename(file_path)
 
         if progressbar:

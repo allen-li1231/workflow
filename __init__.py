@@ -168,6 +168,7 @@ class hue:
                         f"due to fetch_result exception above, "
                         f"result of the following sql is truncated: "
                         f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}")
+                    lst_result[idx] = e
                     del d_future[notebook]
 
             # add task to job pool when there exists vacancy
@@ -188,6 +189,7 @@ class hue:
                         f"due to execute exception above, "
                         f"result of the following sql is truncated: "
                         f"{sqls[i][: MAX_LEN_PRINT_SQL] + '...' if len(sqls[i]) > MAX_LEN_PRINT_SQL else sqls[i]}")
+                    lst_result[i] = e
                 finally:
                     i += 1
 
@@ -299,7 +301,14 @@ class hue:
                 time.sleep(1)
                 for i, future in enumerate(lst_future):
                     if lst_result[i] is None and not future.running():
-                        lst_result[i] = future.result()
+                        try:
+                            lst_result[i] = future.result()
+                        except Exception as e:
+                            self.log.warning(e)
+                            self.log.warning(
+                                f"due to download exception above, "
+                                f"table '{table}' download is cancelled")
+                            lst_result[i] = future.exception()
                         if progressbar:
                             pbar.update(1)
 
@@ -432,11 +441,11 @@ class hue:
         if path:
             dir_ = os.path.dirname(path)
             if not os.path.exists(dir_):
-                self.log.exception(f"directory '{dir_}' does not exist")
+                self.log.error(f"directory '{dir_}' does not exist")
                 raise NotADirectoryError(f"directory '{dir_}' does not exist")
             suffix = os.path.basename(path).rpartition('.')[-1]
             if suffix not in ('xlsx', 'csv', 'xls', 'xlsm'):
-                self.log.exception(f"data type not understood: '{suffix}' in path '{path}'")
+                self.log.error(f"data type not understood: '{suffix}' in path '{path}'")
                 raise TypeError(f"data type not understood: '{suffix}' in path '{path}'")
 
         if decrypt_columns is None or len(decrypt_columns) == 0:
