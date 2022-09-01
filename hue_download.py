@@ -348,7 +348,6 @@ class HueDownload(requests.Session):
         self.log.exception(f"upload {file_path} timed out")
         return TimeoutError(f"upload {file_path} timed out")
 
-    @ensure_login
     def upload(self,
                data,
                reason: str,
@@ -418,7 +417,7 @@ class HueDownload(requests.Session):
                            nrows=nrows or -1)
         buffer.close()
         id_ = res.json()['id']
-        error_msg = f"cannot upload {buffer.name}, please check table name and (encrypt) columns"
+        error_msg = f"cannot upload {buffer.name}, please check table name and (encrypt) column names"
         start_time = time.perf_counter()
         while time.perf_counter() - start_time < timeout:
             time.sleep(wait_sec)
@@ -488,6 +487,7 @@ class HueDownload(requests.Session):
         self.log.info(f"\rdownload finished in {time.perf_counter() - start_time:.3f}")
         return df
 
+    @ensure_login
     @retry(__name__)
     def _get_column(self, table_name):
         self.log.debug(f"getting columns for {table_name}")
@@ -495,6 +495,7 @@ class HueDownload(requests.Session):
         res = self.get(url)
         return res
 
+    @ensure_login
     @retry(__name__)
     def _download(self,
                   table: str,
@@ -520,6 +521,7 @@ class HueDownload(requests.Session):
         }))
         return res
 
+    @ensure_login
     @retry(__name__)
     def _upload(self,
                 file_buffer: IOBase,
@@ -547,6 +549,7 @@ class HueDownload(requests.Session):
         res = self.post(url, data=data)
         return res
 
+    @ensure_login
     @retry(__name__)
     def _get_download_info(self,
                            page=0,
@@ -563,6 +566,7 @@ class HueDownload(requests.Session):
         })
         return res
 
+    @ensure_login
     @retry(__name__)
     def _get_upload_info(self,
                          page=0,
@@ -579,6 +583,7 @@ class HueDownload(requests.Session):
         })
         return res
 
+    @ensure_login
     @retry(__name__)
     def _download_by_id(self, download_id: int):
         self.log.debug(f"downloading by id {download_id}")
@@ -590,7 +595,6 @@ class HueDownload(requests.Session):
         )
         return res
 
-    @ensure_login
     def kill_app(self, app_id):
         """
         kill a YARN application
@@ -612,6 +616,7 @@ class HueDownload(requests.Session):
                 if r_json["status"] != 1:
                     raise RuntimeError(res.text)
 
+    @ensure_login
     @retry(__name__)
     def _kill_app(self, app_id: str):
         self.log.debug(f"killing app {app_id}")

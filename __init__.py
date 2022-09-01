@@ -170,7 +170,7 @@ class hue:
                         f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}")
                     del d_future[notebook]
 
-            # add task to job pool when vacant
+            # add task to job pool when there exists vacancy
             while i < len(sqls) and (len(d_future) < n_jobs or not sync):
                 worker = self.notebook_workers[i]
                 try:
@@ -411,7 +411,8 @@ class hue:
                   path: str = None,
                   new_notebook: bool = False,
                   progressbar: bool = True,
-                  progressbar_offset: int = 0
+                  progressbar_offset: int = 0,
+                  rows_per_fetch: int = 32768
                   ):
         """
         get data from Hue to local as pandas dataframe
@@ -445,6 +446,7 @@ class hue:
                                progressbar_offset=progressbar_offset,
                                print_log=False,
                                new_notebook=new_notebook)
+            res.rows_per_fetch = rows_per_fetch
             if progressbar:
                 table_size = (self.run_sql(f'show tblproperties {table}("numRows")',
                                            progressbar=False,

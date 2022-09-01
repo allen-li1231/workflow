@@ -8,6 +8,7 @@ import os
 import time
 import traceback
 import uuid
+from threading import Thread
 from datetime import datetime
 from html import unescape
 from unicodedata import normalize
@@ -298,8 +299,8 @@ class Notebook(requests.Session):
         self.notebook["name"] = name
         self.notebook["description"] = description
 
-    @retry(__name__)
     @ensure_login
+    @retry(__name__)
     def __create_notebook(self):
         self.log.debug("creating notebook")
         url = self.base_url + "/notebook/api/create_notebook"
@@ -318,8 +319,8 @@ class Notebook(requests.Session):
         self.log.debug(f"create notebook response: {res.text}")
         return res
 
-    @retry(__name__)
     @ensure_login
+    @retry(__name__)
     def _create_session(self):
         # remember that this api won't always init and return a new session
         # instead, it will return existing busy/idle session
@@ -435,7 +436,6 @@ class Notebook(requests.Session):
                 "wasBatchExecuted": False
                 }
 
-    @ensure_login
     def execute(self,
                 sql: str,
                 database: str = "default",
@@ -475,6 +475,7 @@ class Notebook(requests.Session):
             self.recreate_session()
             raise KeyboardInterrupt
 
+    @ensure_login
     @retry(__name__)
     def _execute(self, sql: str):
         sql_print = sql[: MAX_LEN_PRINT_SQL] + "..." \
@@ -565,8 +566,8 @@ class Notebook(requests.Session):
         self.log.debug(f"cancel statement response: {res.text}")
         return res
 
-    @retry(__name__)
     @ensure_login
+    @retry(__name__)
     def _close_statement(self):
         self.log.debug(f"closing statement")
         url = self.base_url + "/notebook/api/close_statement"
@@ -705,6 +706,7 @@ class NotebookResult(object):
         self._progressbar_format["desc"] = PROGRESSBAR["desc"].format(name=self.name, result="result")
         self.data = None
         self.full_log = ""
+        self._last_check = time.perf_counter()
         self._logs_row = 0
         self._app_ids = set()
         self._app_id = ''
@@ -723,13 +725,23 @@ class NotebookResult(object):
     @retry(__name__)
     def _check_status(self):
         url = self.base_url + "/notebook/api/check_status"
-        res = self._notebook.post(url,
-                                  data={"notebook": json.dumps({"id": self.notebook["uuid"]})}
-                                  )
+        payload = {
+            "notebook": json.dumps({
+                "id": None if "id" not in self.notebook else self.notebook["id"],
+                "uuid": self.notebook["uuid"],
+                "parentSavedQueryUuid": None,
+                "isSaved": self.notebook["isSaved"],
+                "sessions": self.notebook["sessions"],
+                "type": self.notebook["type"],
+                "name": self.notebook["name"],
+            }),
+            "snippet": json.dumps(self.snippet)
+        }
+        res = self._notebook.post(url, data=payload)
         self.log.debug(f"_check status response: {res.text}")
         return res
 
-    def check_status(self, return_log=False):
+    def check_status(self, return_log=False, update_interval=60.):
         self.log.info(f"checking {'yarn app: ' + self._app_id if len(self._app_id) else 'status'}")
         if len(self._app_id) > 0:
             r_json = self._get_app_info(self._app_id).json()
@@ -738,31 +750,41 @@ class NotebookResult(object):
                 return self.snippet["status"]
 
             r_json = r_json["app"]
-            self._progress = r_json["progress"]
+            progress = r_json["progress"]
+            self._progress = progress if self._progress < progress else self._progress
+
+        # init time counter
+        cur_check = time.perf_counter()
+        will_update_status = cur_check - self._last_check > update_interval
 
         # fetch cloud log by default
-        cloud_log = self.fetch_cloud_logs()
+        try:
+            cloud_log = self.fetch_cloud_logs()
+        except RuntimeError:
+            cloud_log = ''
         # call _check_status api only when the result has final status
         if "ERROR" in cloud_log:
+            will_update_status = True
             self.log.exception(cloud_log)
-        elif "INFO  : OK" not in cloud_log:
-            if return_log:
-                return cloud_log
-            return self.snippet["status"]
+        elif "INFO  : OK" in cloud_log:
+            will_update_status = True
 
-        # session won't quit if this api is not called, causing "Too many opened session" error
-        r_json = self._check_status().json()
-        if r_json["status"] != 0:
-            if len(cloud_log) > 0:
-                self.log.exception(cloud_log)
+        if will_update_status:
+            self._last_check = cur_check
+            # session won't quit if this api is not called, causing "Too many opened session" error
+            # _check_status responses slow, do not call it while it's not necessary
+            r_json = self._check_status().json()
+            if r_json["status"] != 0:
+                if len(cloud_log) > 0:
+                    self.log.exception(cloud_log)
 
-            if "message" in r_json:
-                raise RuntimeError(r_json["message"])
-            else:
-                raise RuntimeError(r_json)
+                if "message" in r_json:
+                    raise RuntimeError(r_json["message"])
+                else:
+                    raise RuntimeError(r_json)
 
-        status = r_json["query_status"]["status"]
-        self.snippet["status"] = status
+            status = r_json["query_status"]["status"]
+            self.snippet["status"] = status
 
         if return_log:
             return cloud_log
@@ -783,6 +805,7 @@ class NotebookResult(object):
 
         if progressbar:
             self._progressbar = tqdm(total=100, position=progressbar_offset, **self._progressbar_format)
+
         while True:
             time.sleep(wait_sec)
             self.check_status()
@@ -865,9 +888,10 @@ class NotebookResult(object):
         cloud_log = res.json()
         if "logs" not in cloud_log:
             if "message" in cloud_log:
-                self.log.exception(f"fetching_cloud_logs responses: {cloud_log['message']}")
+                self.log.warning(f"fetching_cloud_logs responses: {cloud_log['message']}")
             else:
                 self.log.exception(f"Could not parse logs from cloud response: {res.text}")
+                raise RuntimeError(f"Could not parse logs from cloud response: {res.text}")
 
         for i, job in enumerate(cloud_log["jobs"]):
             if job["started"] and not job["finished"]:
@@ -875,7 +899,10 @@ class NotebookResult(object):
 
             self._app_ids.add(job["name"])
 
+        progress = cloud_log["progress"]
         cloud_log = cloud_log["logs"]
+
+        self._progress = self._progress if self._progress > progress else progress
         if len(cloud_log) > 0:
             self.full_log += "\n" + cloud_log if len(self.full_log) > 0 else cloud_log
             self._logs_row += 1 + cloud_log.count("\n")
@@ -916,7 +943,15 @@ class NotebookResult(object):
     def _get_logs(self, start_row, full_log):
         url = self.base_url + "/notebook/api/get_logs"
         payload = {
-            "notebook": json.dumps(self.notebook),
+            "notebook": json.dumps({
+                "id": None if "id" not in self.notebook else self.notebook["id"],
+                "uuid": self.notebook["uuid"],
+                "parentSavedQueryUuid": None,
+                "isSaved": self.notebook["isSaved"],
+                "sessions": self.notebook["sessions"],
+                "type": self.notebook["type"],
+                "name": self.notebook["name"],
+            }),
             "snippet": json.dumps(self.snippet),
             "from": start_row,
             "jobs": [],  # api won't read jobs, so pass an empty one won't do harm to anything
@@ -926,7 +961,8 @@ class NotebookResult(object):
         res = self._notebook.post(url, data=payload)
         return res
 
-    def to_csv(self, file_name: str = None, encoding="utf-8"):
+    def to_csv(self, file_name: str = None, encoding="utf-8", total: int = None, progressbar=True,
+               progressbar_offset=0):
         """
         Download result of executed sql directly into a csv file.
         For now, only support csv file.
@@ -948,6 +984,17 @@ class NotebookResult(object):
         abs_path = os.path.join(abs_dir, base_name)
 
         self.log.info(f"downloading to {abs_path}")
+        if progressbar:
+            setup_progressbar = PROGRESSBAR.copy()
+            setup_progressbar["desc"] = setup_progressbar["desc"].format(
+                name=self.name,
+                result='fetchall')
+            if total is None:
+                setup_progressbar["bar_format"] = '{l_bar}{n_fmt}{unit}, {rate_fmt}{postfix} |{elapsed}'
+            pbar = tqdm(total=total,
+                        position=progressbar_offset,
+                        unit="rows",
+                        **setup_progressbar)
         with open(abs_path, "w", newline="", encoding=encoding) as f:
             writer = csv.writer(f)
 
@@ -964,6 +1011,9 @@ class NotebookResult(object):
             writer.writerow(lst_metadata)
             writer.writerows(lst_data)
 
+            if progressbar:
+                pbar.update(len(res["data"]))
+
             while res["has_more"]:
                 res = self._fetch_result(start_over=False)
                 res = res.json()["result"]
@@ -973,3 +1023,8 @@ class NotebookResult(object):
                             for row in res["data"]]
 
                 writer.writerows(lst_data)
+                if progressbar:
+                    pbar.update(len(res["data"]))
+
+        if progressbar:
+            pbar.close()
