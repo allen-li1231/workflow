@@ -25,7 +25,7 @@ def setup_stdout_level(logger, level):
     logger.addHandler(ch)
 
 
-def set_log_level(log, verbose):
+def set_stream_log_level(log, verbose):
     has_stream_handler = False
     for handler in log.handlers:
         if isinstance(handler, logging.StreamHandler):

@@ -17,7 +17,7 @@ class Jupyter(JupyterBase):
     def __init__(self, password=None, verbose=False):
         super(Jupyter, self).__init__(password=password)
         self.log = logging.getLogger(__name__ + f".Jupyter")
-        logger.set_log_level(self.log, verbose=verbose)
+        logger.set_stream_log_level(self.log, verbose=verbose)
 
     def upload(self, file_path, dst_path, progressbar=True, progressbar_offset=0):
         """

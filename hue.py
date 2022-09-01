@@ -8,7 +8,6 @@ import os
 import time
 import traceback
 import uuid
-from threading import Thread
 from datetime import datetime
 from html import unescape
 from unicodedata import normalize
@@ -29,7 +28,8 @@ class Beeswax(requests.Session):
                  hive_settings=None,
                  verbose: bool = False):
         self.log = logging.getLogger(__name__ + f".Beeswax")
-        logger.set_log_level(self.log, verbose=verbose)
+        if verbose:
+            logger.set_stream_log_level(self.log, verbose=verbose)
 
         if base_url is None:
             self.base_url = HUE_BASE_URL
@@ -221,7 +221,8 @@ class Notebook(requests.Session):
         self.verbose = verbose
 
         self.log = logging.getLogger(__name__ + f".Notebook[{name}]")
-        logger.set_log_level(self.log, verbose=verbose)
+        if verbose:
+            logger.set_stream_log_level(self.log, verbose=verbose)
 
         self._set_hive(self.hive_settings)
         if base_url is None:
@@ -634,7 +635,7 @@ class Notebook(requests.Session):
         new_nb.verbose = self.verbose if verbose is None else verbose
 
         new_nb.log = logging.getLogger(__name__ + f".Notebook[{name}]")
-        logger.set_log_level(new_nb.log, verbose=new_nb.verbose)
+        logger.set_stream_log_level(new_nb.log, verbose=new_nb.verbose)
 
         if recreate_session:
             new_nb._prepare_notebook(name, description,
@@ -700,7 +701,7 @@ class NotebookResult(object):
         self.verbose = notebook.verbose
 
         self.log = logging.getLogger(__name__ + f".NotebookResult[{self.name}]")
-        logger.set_log_level(self.log, verbose=self.verbose)
+        logger.set_stream_log_level(self.log, verbose=self.verbose)
 
         self._progressbar_format = PROGRESSBAR.copy()
         self._progressbar_format["desc"] = PROGRESSBAR["desc"].format(name=self.name, result="result")

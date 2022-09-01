@@ -30,30 +30,15 @@ class HueDownload(requests.Session):
         self.username = username
         self._password = password
         self.verbose = verbose
-        self._set_log(verbose)
+        self.log = logging.getLogger(__name__ + ".HueDownload")
+        if verbose:
+            logger.set_stream_log_level(self.log, verbose)
 
         self.log.debug("loading img_dict")
         self.benchmark_imgs = np.load(os.path.join(os.path.dirname(__file__), "img_dict.npy"), allow_pickle=True).item()
         super(HueDownload, self).__init__()
 
         self.login(self.username, self._password)
-
-    def _set_log(self, verbose):
-        self.log = logging.getLogger(__name__ + ".HueDownload")
-        has_stream_handler = False
-        for handler in self.log.handlers:
-            if isinstance(handler, logging.StreamHandler):
-                has_stream_handler = True
-                if verbose:
-                    handler.setLevel(logging.INFO)
-                else:
-                    handler.setLevel(logging.WARNING)
-
-        if not has_stream_handler:
-            if verbose:
-                logger.setup_stdout_level(self.log, logging.INFO)
-            else:
-                logger.setup_stdout_level(self.log, logging.WARNING)
 
     @retry(__name__)
     def _login(self, username, password):
