@@ -33,8 +33,9 @@ class hue:
         self.hive_settings = HIVE_PERFORMANCE_SETTINGS.copy() \
             if hive_settings is None else hive_settings
         self.verbose = verbose
+        self.log = logging.getLogger(__name__ + ".hue")
+        logger.set_stream_log_level(self.log, verbose=verbose)
 
-        self._set_log(verbose)
         self.hue_sys = Notebook(username, password,
                                 name=name,
                                 description=description,
@@ -43,23 +44,6 @@ class hue:
         self.hue_download = HueDownload(username, password, verbose)
 
         self.notebook_workers = [self.hue_sys]
-
-    def _set_log(self, verbose):
-        self.log = logging.getLogger(__name__ + ".hue")
-        has_stream_handler = False
-        for handler in self.log.handlers:
-            if isinstance(handler, logging.StreamHandler):
-                has_stream_handler = True
-                if verbose:
-                    handler.setLevel(logging.INFO)
-                else:
-                    handler.setLevel(logging.WARNING)
-
-        if not has_stream_handler:
-            if verbose:
-                logger.setup_stdout_level(self.log, logging.INFO)
-            else:
-                logger.setup_stdout_level(self.log, logging.WARNING)
 
     def run_sql(self,
                 sql: str,
