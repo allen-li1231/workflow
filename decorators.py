@@ -34,8 +34,7 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
                 try:
                     res = func(self, *args, **kwargs)
                     if isinstance(res, requests.models.Response) \
-                            and not ("Transfer-Encoding" in res.headers
-                                     and res.headers["Transfer-Encoding"] == "chunked"):
+                            and res._content_consumed:
                         text = res.text if len(res.text) <= 250 else res.text[:250] + "..."
                         logger.debug(f"response {i}/{attempts} attempts: {text}")
                     else:
@@ -55,7 +54,8 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
                         or res.status_code == 200 or res.status_code == 201:
                     return res
 
-                if isinstance(res, requests.models.Response):
+                if isinstance(res, requests.models.Response) \
+                        and res._content_consumed:
                     logger.warning(f"response error in {i}/{attempts} attempts: {text}")
                 else:
                     logger.warning(f"return error in {i}/{attempts} attempts")
