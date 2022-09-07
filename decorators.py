@@ -33,7 +33,9 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
             while i < attempts:
                 try:
                     res = func(self, *args, **kwargs)
-                    if isinstance(res, requests.models.Response):
+                    if isinstance(res, requests.models.Response) \
+                            and not ("Transfer-Encoding" in res.headers
+                                     and res.headers["Transfer-Encoding"] == "chunked"):
                         text = res.text if len(res.text) <= 250 else res.text[:250] + "..."
                         logger.debug(f"response {i}/{attempts} attempts: {text}")
                     else:
