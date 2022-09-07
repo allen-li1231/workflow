@@ -51,7 +51,7 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
                     continue
 
                 if not isinstance(res, requests.models.Response) \
-                        or res.status_code == 200 or res.status_code == 201:
+                        or res.status_code in (200, 201, 204):
                     return res
 
                 if isinstance(res, requests.models.Response) \

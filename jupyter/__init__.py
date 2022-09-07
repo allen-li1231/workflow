@@ -1,15 +1,11 @@
-import base64
 import json
 import logging
 import os
-import urllib.parse
-import urllib.request
 
 from tqdm.auto import tqdm
 
 from .base import JupyterBase
 from .. import logger
-from ..decorators import retry
 from ..utils import read_file_in_chunks
 
 __all__ = ["Jupyter"]
@@ -21,9 +17,11 @@ class Jupyter(JupyterBase):
         self.log = logging.getLogger(__name__ + f".Jupyter")
         logger.set_stream_log_level(self.log, verbose=verbose)
 
+        self.terminal = None
+
     def download(self, file_path, dst_path, progressbar=True, progressbar_offset=0):
         if not os.path.isdir(dst_path):
-            raise NotADirectoryError(f"destination 'dst_path' does't exist or is not a directory")
+            raise NotADirectoryError(f"destination '{dst_path}' does't exist or is not a directory")
 
         file_name = os.path.basename(file_path)
         buffer = self._download(file_path)
@@ -37,7 +35,7 @@ class Jupyter(JupyterBase):
                         unit_divisor=1024,
                         position=progressbar_offset,
                         **setup_progressbar)
-        with open(dst_path, "wb") as f:
+        with open(os.path.join(dst_path, file_name), "wb") as f:
             for chunk in buffer.iter_content(chunk_size=8192):
                 f.write(chunk)
                 if progressbar:
@@ -102,29 +100,56 @@ class Jupyter(JupyterBase):
             pbar.close()
         return res.status_code
 
-    @retry(__name__)
-    def _download(self, file_path):
-        url = urllib.parse.urljoin(self.base_url + "/files/",
-                                   urllib.request.pathname2url(file_path))
-        res = self.get(url, data={"download": 1}, stream=True)
-        return res
+    def new_terminal(self):
+        return self._new_terminal().json()["name"]
 
-    @retry(__name__)
-    def _upload(self, data, file_name, dst_path, chunk=None):
-        dst_url = urllib.parse.urljoin(self.base_url + "/api/contents/", dst_path)
-        dst_url = dst_url + file_name if dst_url.endswith('/') else dst_url + '/' + file_name
+    def close_terminal(self, name):
+        res = self._close_terminal(name)
+        if res.status_code != 204:
+            raise RuntimeError(res.json()["message"])
 
-        self.headers["Content-Type"] = "application/octet-stream"
-        data = base64.b64encode(data).decode("utf-8") + '=' * (4 - len(data) % 4)
-        body = {
-            'content': data,
-            'name': file_name,
-            'path': dst_path,
-            'format': 'base64',
-            'type': 'file'
-        }
-        if chunk is not None:
-            body["chunk"] = chunk
+    def get_terminals(self):
+        return self._get_terminals().json()
 
-        res = self.put(dst_url, data=json.dumps(body))
-        return res
+    def create_terminal_connection(self, terminal_name):
+        conn = self._ws_terminal(terminal_name)
+        self.terminal = {"name": terminal_name, "ws": conn}
+        return conn
+
+    def execute_terminal(self, command, terminal_name=None, print_result=True):
+        # initialize and move cursor to the end of terminal
+        if self.terminal is None:
+            terminal_name = self.new_terminal()
+            conn = self.create_terminal_connection(terminal_name)
+            while "setup" not in conn.recv():
+                continue
+
+        elif terminal_name:
+            conn = self.create_terminal_connection(terminal_name)
+            while "setup" not in conn.recv():
+                continue
+        else:
+            conn = self.terminal["ws"]
+
+        # execute command
+        conn.send(json.dumps(["stdin", f"{command}\r"]))
+        r_json = json.loads(conn.recv())
+        # print input
+        if print_result:
+            print(r_json[1])
+
+        # print output
+        result = ""
+        while not r_json[1].endswith("]$ "):
+            r_json = json.loads(conn.recv())
+            result += r_json[1]
+
+        if print_result:
+            print(result)
+
+        return result
+
+    def close(self):
+        if self.terminal:
+            self.terminal["ws"].close()
+            self.close_terminal(self.terminal["name"])
