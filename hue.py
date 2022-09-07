@@ -474,6 +474,8 @@ class Notebook(requests.Session):
         except KeyboardInterrupt:
             self.cancel_statement()
             self.recreate_session()
+            if self._result._progressbar:
+                self._result._progressbar.close()
             raise KeyboardInterrupt
 
     @ensure_login

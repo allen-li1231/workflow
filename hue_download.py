@@ -90,7 +90,6 @@ class HueDownload(requests.Session):
         self.is_logged_in = True
         self.headers["Authorization"] = "Bearer " + r_json["token"]
 
-    @ensure_login
     def get_column(self, table_name):
         res = self._get_column(table_name=table_name)
         columns = [desc["name"] for desc in res.json()]
@@ -187,7 +186,6 @@ class HueDownload(requests.Session):
         r = pd.read_csv(StringIO(r.text), header=csv_header)
         return r
 
-    @ensure_login
     def download(self,
                  table: str,
                  reason: str,

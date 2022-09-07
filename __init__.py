@@ -374,7 +374,7 @@ class hue:
             return table_name
         except Exception as e:
             self.log.warning(e)
-            self.log.info('data has uploaded to the table ' + uploaded_table)
+            self.log.warning('data has uploaded to the table ' + uploaded_table)
             return uploaded_table
 
     def insert_data(self, file_path, table_name, reason, uploadColumnsInfo='1', uploadEncryptColumns=''):
