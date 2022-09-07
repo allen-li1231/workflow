@@ -457,7 +457,6 @@ class HueDownload(requests.Session):
                     for chunk in buffer.iter_content(chunk_size=8192):
                         f.write(chunk)
 
-                df = pd.read_csv(StringIO(buffer.text))
         elif suffix in ("xlsx", "xls", "xlsm"):
             df = pd.read_csv(StringIO(buffer.text))
             if column_names:
@@ -468,7 +467,6 @@ class HueDownload(requests.Session):
             raise TypeError(f"save format {suffix} not supported")
 
         self.log.info(f"\rdownload finished in {time.perf_counter() - start_time:.3f}")
-        return df
 
     @ensure_login
     @retry(__name__)
