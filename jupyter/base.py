@@ -140,8 +140,10 @@ class Terminal(ws.WebSocketApp):
             self.log.warning(f"unable to parse and unpack'{message}' to json")
             message = message
 
+        message = message.rstrip("\r\n")
         if "]$ " not in message:
             self.msg = message
+
         print(message)
 
     def on_error(self, error):
