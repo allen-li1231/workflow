@@ -11,8 +11,8 @@ __all__ = ["Jupyter"]
 
 
 class Jupyter(JupyterBase):
-    def __init__(self, password=None, verbose=False):
-        super(Jupyter, self).__init__(password=password, verbose=verbose)
+    def __init__(self, token=None, password=None, verbose=False):
+        super(Jupyter, self).__init__(token=token, password=password, verbose=verbose)
         self.log = logging.getLogger(__name__ + f".Jupyter")
         logger.set_stream_log_level(self.log, verbose=verbose)
 

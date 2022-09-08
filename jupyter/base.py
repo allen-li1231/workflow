@@ -11,20 +11,17 @@ from datetime import datetime
 
 from .. import logger
 from ..decorators import retry
-from ..settings import PROGRESSBAR
-
-JUPYTER_URL = 'http://10.19.181.26:9999'
-JUPYTER_TOKEN = "fengkong"
-MAX_UPLOAD_SIZE = 25 * 1024 * 1024
+from ..settings import PROGRESSBAR, JUPYTER_TOKEN, JUPYTER_URL, JUPYTER_MAX_UPLOAD_SIZE
 
 
 class JupyterBase(requests.Session):
-    def __init__(self, password=None, verbose=False):
+    def __init__(self, token=None, password=None, verbose=False):
         super(JupyterBase, self).__init__()
 
         self.base_url = JUPYTER_URL
-        self.token = JUPYTER_TOKEN
-        self.max_upload_size = MAX_UPLOAD_SIZE
+
+        self.token = JUPYTER_TOKEN or '' if token is None else token
+        self.max_upload_size = JUPYTER_MAX_UPLOAD_SIZE
 
         self.log = logging.getLogger(__name__ + f".JupyterBase")
         logger.set_stream_log_level(self.log, verbose=verbose)

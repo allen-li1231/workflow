@@ -86,3 +86,8 @@ PROGRESSBAR = {
 }
 
 EXCEL_ENGINE = "xlsxwriter" if importlib.util.find_spec("xlsxwriter") else "openpyxl"
+
+# jupyter
+JUPYTER_URL = 'http://10.19.181.26:9999'
+JUPYTER_TOKEN = "fengkong"
+JUPYTER_MAX_UPLOAD_SIZE = 25 * 1024 * 1024
