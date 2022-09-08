@@ -6,13 +6,15 @@ import base64
 import random
 import json
 import logging
+import warnings
 from datetime import datetime
+
 from .. import logger
 from ..decorators import retry
 from ..settings import PROGRESSBAR
 
 JUPYTER_URL = 'http://10.19.181.26:9999'
-TOKEN = "fengkong"
+JUPYTER_TOKEN = "fengkong"
 MAX_UPLOAD_SIZE = 25 * 1024 * 1024
 
 
@@ -21,8 +23,7 @@ class JupyterBase(requests.Session):
         super(JupyterBase, self).__init__()
 
         self.base_url = JUPYTER_URL
-        self.ws_url = self.base_url.replace("http", "ws")
-        self.token = TOKEN
+        self.token = JUPYTER_TOKEN
         self.max_upload_size = MAX_UPLOAD_SIZE
 
         self.log = logging.getLogger(__name__ + f".JupyterBase")
@@ -36,7 +37,7 @@ class JupyterBase(requests.Session):
             "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36"
         self.headers["X-Requested-With"] = "XMLHttpRequest"
         self.log.info(f"Jupyter logging in [{self.base_url}]")
-        res = self.get(JUPYTER_URL + "/?token=" + TOKEN)
+        res = self.get(JUPYTER_URL + "/?token=" + JUPYTER_TOKEN)
         self.headers["X-XSRFToken"] = res.cookies["_xsrf"]
 
         if password is not None:
@@ -96,21 +97,62 @@ class JupyterBase(requests.Session):
         res = self.put(dst_url, data=json.dumps(body))
         return res
 
-    def _ws_terminal(self, name):
-        headers = {
+
+class Terminal(ws.WebSocketApp):
+    def __init__(self, name, headers, cookies, verbose=False):
+        self.base_url = JUPYTER_URL.replace("http", "ws") \
+                        + f"/terminals/websocket/{name}?token={JUPYTER_TOKEN}"
+        self.name = name
+
+        self.headers = {
             "Accept-Encoding": "gzip, deflate",
-            "User-Agent": self.headers["User-Agent"],
+            "User-Agent": headers["User-Agent"],
             "Cache-Control": "no-cache",
             "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits",
             "Sec-WebSocket-Version": '13',
             "Sec-WebSocket-Key": str(base64.b64encode(bytes([random.randint(0, 255) for _ in range(16)])),
                                      'ascii'),
         }
-        cookies = self.cookies.get_dict()
-        cookies = "; ".join([f"{k}={v}" for k, v in cookies.items()])
+        cookies = cookies.get_dict()
+        self.cookies = "; ".join([f"{k}={v}" for k, v in cookies.items()])
 
-        url = self.ws_url + f"/terminals/websocket/{name}?token={self.token}"
+        self.log = logging.getLogger(__name__ + f".Terminal")
+        logger.set_stream_log_level(self.log, verbose=verbose)
 
-        conn = ws.WebSocket(skip_utf8_validation=True)
-        conn.connect(url, header=headers, cookie=cookies)
-        return conn
+        self.log.debug(f"initializing Terminal {name}")
+        super().__init__(self.base_url,
+                         header=self.headers,
+                         cookie=self.cookies,
+                         on_open=self.on_open,
+                         on_message=self.on_message,
+                         on_error=self.on_error,
+                         on_close=self.on_close)
+
+    def on_message(self, message):
+        try:
+            r_json = json.loads(message)
+            source, message = r_json
+            if source != "stdout":
+                return
+        except Exception as e:
+            self.log.warning(e)
+            self.log.warning(f"unable to parse and unpack'{message}' to json")
+            message = message
+
+        print(message)
+
+    def on_error(self, error):
+        warnings.warn(RuntimeError(error))
+
+    def on_close(self, close_status_code, close_msg):
+        print(f"### Terminal {self.name} closed ###")
+
+    def on_open(self):
+        print(f"### Opened terminal {self.name} connection ###")
+
+    def execute(self, command):
+        command = json.dumps(["stdin", f"{command}\r"])
+        return super().send(command)
+
+    def close(self, **kwargs):
+        super(Terminal, self).close(**kwargs)

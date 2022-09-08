@@ -1,10 +1,9 @@
-import json
 import logging
 import os
-
+from threading import Thread
 from tqdm.auto import tqdm
 
-from .base import JupyterBase
+from .base import JupyterBase, Terminal
 from .. import logger
 from ..utils import read_file_in_chunks
 
@@ -18,8 +17,10 @@ class Jupyter(JupyterBase):
         logger.set_stream_log_level(self.log, verbose=verbose)
 
         self.terminal = None
+        self.verbose = verbose
 
     def download(self, file_path, dst_path, progressbar=True, progressbar_offset=0):
+        self.log.debug(f"downloading '{file_path}' to '{dst_path}")
         if not os.path.isdir(dst_path):
             raise NotADirectoryError(f"destination '{dst_path}' does't exist or is not a directory")
 
@@ -68,6 +69,7 @@ class Jupyter(JupyterBase):
         block_size = self.max_upload_size
         file_name = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
+        self.log.debug(f"uploading '{file_path}' to '{dst_path}")
 
         with open(file_path, 'rb') as f:
             if file_size <= block_size:
@@ -103,53 +105,37 @@ class Jupyter(JupyterBase):
     def new_terminal(self):
         return self._new_terminal().json()["name"]
 
-    def close_terminal(self, name):
-        res = self._close_terminal(name)
+    def close_terminal(self, name=None):
+        if name:
+            if self.terminal and self.terminal["name"] == name:
+                self.terminal["ws"].close()
+                self.terminal["thread"].close()
+                self.terminal = None
+
+            res = self._close_terminal(name)
+        elif self.terminal:
+            self.terminal["ws"].close()
+            self.terminal["thread"].close()
+            res = self._close_terminal(self.terminal["name"])
+            self.terminal = None
+        else:
+            raise ValueError("please specify terminal name")
+
         if res.status_code != 204:
             raise RuntimeError(res.json()["message"])
 
     def get_terminals(self):
         return self._get_terminals().json()
 
-    def create_terminal_connection(self, terminal_name):
-        conn = self._ws_terminal(terminal_name)
-        self.terminal = {"name": terminal_name, "ws": conn}
+    def create_terminal_connection(self, name):
+        self.log.debug(f"creating terminal {name} connection")
+        conn = Terminal(name=name,
+                        headers=self.headers,
+                        cookies=self.cookies,
+                        verbose=self.verbose)
+        thread = Thread(target=conn.run_forever, args=())
+        self.terminal = {"name": name,
+                         "ws": conn,
+                         "thread": thread}
+        thread.start()
         return conn
-
-    def execute_terminal(self, command, terminal_name=None, print_result=True):
-        # initialize and move cursor to the end of terminal
-        if self.terminal is None:
-            terminal_name = self.new_terminal()
-            conn = self.create_terminal_connection(terminal_name)
-            while "setup" not in conn.recv():
-                continue
-
-        elif terminal_name:
-            conn = self.create_terminal_connection(terminal_name)
-            while "setup" not in conn.recv():
-                continue
-        else:
-            conn = self.terminal["ws"]
-
-        # execute command
-        conn.send(json.dumps(["stdin", f"{command}\r"]))
-        r_json = json.loads(conn.recv())
-        # print input
-        if print_result:
-            print(r_json[1])
-
-        # print output
-        result = ""
-        while not r_json[1].endswith("]$ "):
-            r_json = json.loads(conn.recv())
-            result += r_json[1]
-
-        if print_result:
-            print(result)
-
-        return result
-
-    def close(self):
-        if self.terminal:
-            self.terminal["ws"].close()
-            self.close_terminal(self.terminal["name"])
