@@ -132,38 +132,44 @@ class Terminal(ws.WebSocketApp):
                          on_close=self.on_close)
         self.msg = None
 
-    def on_message(self, message):
-        try:
-            r_json = json.loads(message)
-            source, message = r_json
-            if source != "stdout":
-                return
-        except Exception as e:
-            self.log.warning(e)
-            self.log.warning(f"unable to parse and unpack'{message}' to json")
-            message = message
+    def on_message(self, *args):
+        def wrapper(message):
+            try:
+                r_json = json.loads(message)
+                source, message = r_json
+                if source != "stdout":
+                    return
+            except Exception as e:
+                self.log.warning(e)
+                self.log.warning(f"unable to parse and unpack'{message}' to json")
+                message = message
 
-        message = message.rstrip("\r\n")
-        if "]$ " not in message:
-            self.msg = message
+            message = message.rstrip("\r\n")
+            if "]$ " not in message:
+                self.msg = message
 
-        if self.print_message:
-            print(message)
+            if self.print_message:
+                print(message)
 
-    def on_error(self, error):
-        warnings.warn(RuntimeError(error))
+        if ws.__version__ >= "0.58.0":
+            return wrapper(args[1])
+        else:
+            return wrapper(args[0])
 
-    def on_close(self, close_status_code, close_msg):
+    def on_error(self, *args):
+        if ws.__version__ >= "0.58.0":
+            warnings.warn(RuntimeError(args[1]))
+        else:
+            warnings.warn(RuntimeError(args[0]))
+
+    def on_close(self, *args):
         if self.print_message:
             print(f"### Terminal {self.name} closed ###")
 
-    def on_open(self):
+    def on_open(self, *args):
         if self.print_message:
             print(f"### Opened terminal {self.name} connection ###")
 
     def execute(self, command):
         command = json.dumps(["stdin", f"{command}\r"])
         return self.send(command)
-
-    def close(self, **kwargs):
-        super(Terminal, self).close(**kwargs)
