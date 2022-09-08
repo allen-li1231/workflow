@@ -127,7 +127,7 @@ class Jupyter(JupyterBase):
     def get_terminals(self):
         return self._get_terminals().json()
 
-    def create_terminal_connection(self, name, print_message=True):
+    def connect_terminal(self, name, print_message=True):
         self.log.debug(f"creating terminal {name} connection")
         conn = Terminal(name=name,
                         headers=self.headers,
