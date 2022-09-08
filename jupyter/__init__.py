@@ -137,5 +137,6 @@ class Jupyter(JupyterBase):
         self.terminal = {"name": name,
                          "ws": conn,
                          "thread": thread}
+        thread.setDaemon(True)
         thread.start()
         return conn
