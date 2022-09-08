@@ -99,10 +99,16 @@ class JupyterBase(requests.Session):
 
 
 class Terminal(ws.WebSocketApp):
-    def __init__(self, name, headers, cookies, verbose=False):
+    def __init__(self,
+                 name,
+                 headers,
+                 cookies,
+                 print_message=True,
+                 verbose=False):
         self.base_url = JUPYTER_URL.replace("http", "ws") \
                         + f"/terminals/websocket/{name}?token={JUPYTER_TOKEN}"
         self.name = name
+        self.print_message = print_message
 
         self.headers = {
             "Accept-Encoding": "gzip, deflate",
@@ -144,16 +150,19 @@ class Terminal(ws.WebSocketApp):
         if "]$ " not in message:
             self.msg = message
 
-        print(message)
+        if self.print_message:
+            print(message)
 
     def on_error(self, error):
         warnings.warn(RuntimeError(error))
 
     def on_close(self, close_status_code, close_msg):
-        print(f"### Terminal {self.name} closed ###")
+        if self.print_message:
+            print(f"### Terminal {self.name} closed ###")
 
     def on_open(self):
-        print(f"### Opened terminal {self.name} connection ###")
+        if self.print_message:
+            print(f"### Opened terminal {self.name} connection ###")
 
     def execute(self, command):
         command = json.dumps(["stdin", f"{command}\r"])

@@ -127,11 +127,12 @@ class Jupyter(JupyterBase):
     def get_terminals(self):
         return self._get_terminals().json()
 
-    def create_terminal_connection(self, name):
+    def create_terminal_connection(self, name, print_message=True):
         self.log.debug(f"creating terminal {name} connection")
         conn = Terminal(name=name,
                         headers=self.headers,
                         cookies=self.cookies,
+                        print_message=print_message,
                         verbose=self.verbose)
         thread = Thread(target=conn.run_forever, args=())
         self.terminal = {"name": name,
