@@ -115,7 +115,7 @@ class Jupyter(JupyterBase):
             res = self._close_terminal(name)
         elif self.terminal:
             self.terminal["ws"].close()
-            self.terminal["thread"].close()
+            self.terminal["thread"].join()
             res = self._close_terminal(self.terminal["name"])
             self.terminal = None
         else:

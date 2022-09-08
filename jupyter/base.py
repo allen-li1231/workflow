@@ -127,6 +127,7 @@ class Terminal(ws.WebSocketApp):
                          on_message=self.on_message,
                          on_error=self.on_error,
                          on_close=self.on_close)
+        self.msg = None
 
     def on_message(self, message):
         try:
@@ -139,6 +140,8 @@ class Terminal(ws.WebSocketApp):
             self.log.warning(f"unable to parse and unpack'{message}' to json")
             message = message
 
+        if "]$ " not in message:
+            self.msg = message
         print(message)
 
     def on_error(self, error):
@@ -152,7 +155,7 @@ class Terminal(ws.WebSocketApp):
 
     def execute(self, command):
         command = json.dumps(["stdin", f"{command}\r"])
-        return super().send(command)
+        return self.send(command)
 
     def close(self, **kwargs):
         super(Terminal, self).close(**kwargs)
