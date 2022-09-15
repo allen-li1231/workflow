@@ -20,6 +20,25 @@ class Jupyter(JupyterBase):
         self.verbose = verbose
 
     def download(self, file_path, dst_path, progressbar=True, progressbar_offset=0):
+        """
+        Download File to Jupyter Notebook Server
+        ----------------------------------------
+
+        :param file_path:
+            The file path to the Jupyter content to be downloaded
+
+        :param dst_path:
+            The path where resource should be placed in local.
+            The destination directory must exist.
+
+        :param progressbar: whether to print progressbar during waiting
+                          default to True
+
+        :param progressbar_offset: use this parameter to control sql progressbar positions
+
+        :return: server response
+        """
+
         self.log.debug(f"downloading '{file_path}' to '{dst_path}")
         if not os.path.isdir(dst_path):
             raise NotADirectoryError(f"destination '{dst_path}' does't exist or is not a directory")
@@ -65,6 +84,7 @@ class Jupyter(JupyterBase):
 
         :return: server response
         """
+
         # default block size is 25MB
         block_size = self.max_upload_size
         file_name = os.path.basename(file_path)

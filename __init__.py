@@ -54,9 +54,7 @@ class hue:
                 sync=True,
                 new_notebook=False):
         """
-        sql 查询语句
-        database 选填，默认'default'
-        sync 选填，True，是否异步执行sql
+        Run HiveQL using hue Notebook API
 
         :param sql: query raw string to execute
         :param database: database on Hive
@@ -71,7 +69,7 @@ class hue:
         :param new_notebook: whether to initialize a new notebook
                              default to False
 
-        :return: hue.NotebookResult, which handles result of corresponding sql
+        :return: hue.NotebookResult, which handles result of corresponding sql query
         """
         if new_notebook:
             nb = self.hue_sys.new_notebook(self.name,
@@ -101,7 +99,7 @@ class hue:
                  sync=True
                  ):
         """
-        run concurrent hiveql using Hue Notebook api.
+        run concurrent HiveQL using Hue Notebook api.
 
         :param sqls: iterable instance of sql strings
         :param database: string, default "default", database name
@@ -215,16 +213,16 @@ class hue:
         :param decrypt_columns: columns to be decrypted
         :param limit: the maximum number of records to be downloaded
                       default to all records
-        :param path: output csv file if specified.
-                     default to return Pandas.DataFrame
-                     this is designed to download large table without using up memory
+        :param path: output file if specified.
+                     default to return Pandas.DataFrame without saving data to local
+                     when save file in .csv, the method is designed to download large table in low memory
         :param wait_sec: time interval while waiting server for preparing for download
                          default to 5 seconds
         :param timeout: maximum seconds to wait for the server preparation
                        default to wait indefinitely
 
         :return: Pandas.DataFrame if path is not specified,
-                 otherwise output a csv file to path and return None
+                 otherwise output file to path and return None
         """
         return self.hue_download.download(
             table,
@@ -248,6 +246,27 @@ class hue:
                        progressbar: bool = True,
                        progressbar_offset: int = 0
                        ):
+        """
+        Batch downloading tasks
+
+        :param tables: iterable of string of table names
+        :param reasons: reasons of downloading, iterable of string of reasons or string
+                        when passed string, it indicates all tables are downloaded for one reason
+        :param columns: specify which of the columns in table to download from Hue,
+                        default to all columns
+        :param column_names: rename column names if needed
+        :param decrypt_columns: columns to be decrypted
+        :param paths: iterable of path string, optional, will download file if passed
+                      when save file in .csv, the method is designed to download large table in low memory
+        :param n_jobs: maximum concurrent download tasks
+                       default to 5
+        :param progressbar: whether to show a progressbar
+        :param progressbar_offset: pr
+
+        :return: Pandas.DataFrame if paths are not specified,
+                 otherwise output files to path and return None
+        """
+
         if decrypt_columns is not None \
                 and any(len(cols) for cols in decrypt_columns) \
                 and reasons is None:
@@ -342,13 +361,12 @@ class hue:
         a refactored version of upload_data from WxCustom
         parse upload data and call upload API, if success, return uploaded table name.
 
-        :param data: pandas.DataFrame, pandas.Series or path str to xlsx,xls or csv file
+        :param data: pandas.DataFrame, pandas.Series or path str to xlsx, xls or csv file
         :param reason: str, upload reason
         :param columns: list, list of columns to upload
         :param column_names: list, list of column with respective to their alias,
                             must be as same length as columns
         :param encrypt_columns: list, list of columns to encrypt during upload
-        :param nrows: number of rows to upload, default to be -1, all rows
         :param wait_sec: time interval while waiting server for preparing for upload
                          default to 5 seconds
         :param timeout: maximum seconds to wait for the server preparation
@@ -377,24 +395,45 @@ class hue:
             self.log.warning('data has uploaded to the table ' + uploaded_table)
             return uploaded_table
 
-    def insert_data(self, file_path, table_name, reason, uploadColumnsInfo='1', uploadEncryptColumns=''):
+    def insert_data(self,
+                    data,
+                    table_name: str,
+                    reason: str,
+                    columns: list = None,
+                    column_names: list = None,
+                    encrypt_columns: list = None,
+                    drop: bool = True
+                    ):
         """
-            file_path  必填，需要上传文件位置
-            table_name 必填，需要插入数据的表名
-            reason 必填，上传事由
-            uploadColumnsInfo 选填，默认写1，可用作备注，与上传数据无关
-            uploadEncryptColumns 选填，默认'',需要加密的列，多个用逗号隔开
+        Upload and insert data into existing table
+
+        :param data: pandas.DataFrame, pandas.Series or path str to xlsx, xls or csv file
+        :param table_name: name of table to which data will append
+        :param columns: list, list of columns to upload
+        :param column_names: list, list of column with respective to their alias,
+                            must be as same length as columns
+        :param encrypt_columns: list, list of columns to encrypt during upload
+        :param reason: str, upload reason
+        :param drop: whether to drop uploaded temporary table once insertion succeeds
+
+        :return destination table name
         """
-        uploaded_table = self.hue_download.upload_data(file_path=file_path,
-                                                       reason=reason,
-                                                       uploadColumnsInfo=uploadColumnsInfo,
-                                                       uploadEncryptColumns=uploadEncryptColumns)
+        uploaded_table = self.upload(data=data,
+                                     reason=reason,
+                                     columns=columns,
+                                     column_names=column_names,
+                                     encrypt_columns=encrypt_columns)
         try:
-            self.run_sql('insert into table %s \nselect * from %s' % (table_name, uploaded_table))
-            print('success')
+            self.run_sql(f'insert into table {table_name} select * from {uploaded_table}')
         except Exception as e:
-            print('upload failed, the data is uploaded to the table ' + uploaded_table)
+            self.log.warning(e)
+            self.log.warning('upload failed, the data is uploaded to the table ' + uploaded_table)
             return uploaded_table
+
+        if drop:
+            self.run_sql("drop table" + uploaded_table)
+
+        return table_name
 
     def get_table(self,
                   table: str,
@@ -418,8 +457,10 @@ class hue:
         :param column_names: rename column names if needed
         :param decrypt_columns: columns to be decrypted
         :param path: default None, path to save table data, not to save table if None
+        :param new_notebook: default False, whether to open a new Notebook, this is not designed for user use
         :param progressbar: whether to show progress bar during waiting
         :param progressbar_offset: use this parameter to control sql progressbar positions
+        :param rows_per_fetch: rows to fetch per request, tweak it if encounter "Too many sessions" error
 
         :return: Pandas.DataFrame
         """
@@ -474,6 +515,12 @@ class hue:
                                  path=path)
 
     def kill_app(self, app_id):
+        """
+        Kill Yarn Application by app id
+
+        :param app_id: str or iterable of app_ids
+        """
+
         return self.hue_download.kill_app(app_id)
 
     def close(self):
