@@ -109,7 +109,7 @@ class Jupyter(JupyterBase):
         if name:
             if self.terminal and self.terminal["name"] == name:
                 self.terminal["ws"].close()
-                self.terminal["thread"].close()
+                self.terminal["thread"].join()
                 self.terminal = None
 
             res = self._close_terminal(name)

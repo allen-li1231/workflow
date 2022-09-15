@@ -355,7 +355,7 @@ class HueDownload(requests.Session):
         :param wait_sec: time interval while waiting server for preparing for upload
                          default to 5 seconds
         :param timeout: maximum seconds to wait for the server preparation
-                       default to wait indefinitely
+                        default to wait indefinitely
         :return: str, name of uploaded table
         """
         if isinstance(data, (pd.DataFrame, pd.Series)):

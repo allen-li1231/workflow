@@ -453,8 +453,12 @@ class Notebook(requests.Session):
 
             r_json = self._execute(sql).json()
             if r_json["status"] != 0:
-                self.log.error(r_json["message"])
-                raise RuntimeError(r_json["message"])
+                if "message" in r_json:
+                    self.log.error(r_json["message"])
+                    raise RuntimeError(r_json["message"])
+                else:
+                    self.log.error(r_json.text)
+                    raise RuntimeError(r_json.text)
 
             self.notebook["id"] = r_json["history_id"]
             self.notebook["uuid"] = r_json["history_uuid"]
@@ -754,7 +758,7 @@ class NotebookResult(object):
 
             r_json = r_json["app"]
             progress = r_json["progress"]
-            self._progress = progress if self._progress < progress else self._progress
+            self._progress = progress
 
         # init time counter
         cur_check = time.perf_counter()
@@ -846,6 +850,8 @@ class NotebookResult(object):
                 result='fetchall')
             if total is None:
                 setup_progressbar["bar_format"] = '{l_bar}{n_fmt}{unit}, {rate_fmt}{postfix} |{elapsed}'
+            else:
+                setup_progressbar["bar_format"] = '{l_bar}{bar:25}|[{elapsed}<{remaining}]'
             pbar = tqdm(total=total,
                         position=progressbar_offset,
                         unit="rows",
@@ -994,6 +1000,8 @@ class NotebookResult(object):
                 result='fetchall')
             if total is None:
                 setup_progressbar["bar_format"] = '{l_bar}{n_fmt}{unit}, {rate_fmt}{postfix} |{elapsed}'
+            else:
+                setup_progressbar["bar_format"] = '{l_bar}{bar:25}|[{elapsed}<{remaining}]'
             pbar = tqdm(total=total,
                         position=progressbar_offset,
                         unit="rows",
