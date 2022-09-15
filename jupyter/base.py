@@ -28,6 +28,7 @@ class JupyterBase(requests.Session):
 
         setup_progressbar = PROGRESSBAR.copy()
         del setup_progressbar["desc"]
+        setup_progressbar["bar_format"] = '{l_bar}{bar:25}|{n_fmt}/{total_fmt}{unit} [{elapsed}<{remaining}]'
         self._progressbar_format = setup_progressbar
 
         self.headers["User-Agent"] = \
