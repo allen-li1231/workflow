@@ -431,7 +431,7 @@ class hue:
             return uploaded_table
 
         if drop:
-            self.run_sql("drop table" + uploaded_table)
+            self.run_sql("drop table if exists " + uploaded_table)
 
         return table_name
 
