@@ -1,5 +1,5 @@
 """
-@Author: 李中豪    supermrli@hotmail.com
+@Author: Allen Li    supermrli@hotmail.com
 """
 import os
 import time
