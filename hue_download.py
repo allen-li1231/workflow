@@ -361,7 +361,7 @@ class HueDownload(requests.Session):
         if isinstance(data, (pd.DataFrame, pd.Series)):
             buffer = StringIO()
             buffer.name = "pandas_dataframe"
-            data.to_csv(buffer, index=False)
+            data.to_csv(buffer, index=False, encoding="utf-8")
             columns, nrows = columns or data.columns, nrows or data.shape[0]
         elif isinstance(data, str) and re.findall('\.csv$|\.xlsx?$', data):
             # instead of read all data in memory using pd.read_...
@@ -447,26 +447,22 @@ class HueDownload(requests.Session):
             raise TypeError(f"path should be string, got {type(path)}")
 
         suffix = path.rpartition(".")[-1]
-        if suffix == "csv":
-            if column_names:
-                df = pd.read_csv(StringIO(buffer.text))
-                df.columns = column_names
-                df.to_csv(path, index=False)
-            else:
-                with open(path, "wb") as f:
-                    for chunk in buffer.iter_content(chunk_size=8192):
-                        f.write(chunk)
-
-        elif suffix in ("xlsx", "xls", "xlsm"):
+        if suffix in ("xlsx", "xls", "xlsm"):
             df = pd.read_csv(StringIO(buffer.text))
             if column_names:
                 df.columns = column_names
 
             df.to_excel(path, index=False, engine=EXCEL_ENGINE)
+        elif column_names:
+            df = pd.read_csv(StringIO(buffer.text))
+            df.columns = column_names
+            df.to_csv(path, index=False, encoding="utf-8")
         else:
-            raise TypeError(f"save format {suffix} not supported")
+            with open(path, "wb") as f:
+                for chunk in buffer.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
-        self.log.info(f"\rdownload finished in {time.perf_counter() - start_time:.3f}")
+        self.log.info(f"\rdownload finished in {time.perf_counter() - start_time:.3f} secs")
 
     @ensure_login
     @retry(__name__)
@@ -564,7 +560,6 @@ class HueDownload(requests.Session):
         })
         return res
 
-    @ensure_login
     @retry(__name__)
     def _download_by_id(self, download_id: int):
         self.log.debug(f"downloading by id {download_id}")

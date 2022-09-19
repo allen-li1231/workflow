@@ -502,18 +502,34 @@ class Notebook(requests.Session):
         Set the priority for Hive Query
 
         :param priority: one of "VERY_HIGH", "HIGH", "NORMAL", "LOW", "VERY_LOW",
-            case insensitive
+                         case insensitive
         """
 
         self.hive_settings["mapreduce.job.priority"] = priority.upper()
         self._set_hive(self.hive_settings)
 
+    def set_backtick(self, as_regex):
+        """
+        Set usage of ` for Hive Query
+
+        :param as_regex: boolean
+        """
+
+        if as_regex:
+            self.hive_settings["spark.sql.parser.quotedRegexColumnNames"] = "true"
+            self.hive_settings["hive.support.quoted.identifiers"] = "none"
+        else:
+            self.hive_settings["spark.sql.parser.quotedRegexColumnNames"] = "false"
+            self.hive_settings["hive.support.quoted.identifiers"] = "column"
+
+        self._set_hive(self.hive_settings)
+
     def set_engine(self, engine: str):
         """
-        Set the priority for Hive Query
+        Set the execute engine for Hive Query
 
         :param engine: one of "mr", "tez", spark",
-            case insensitive
+                       case insensitive
         """
 
         self.hive_settings["hive.execution.engine"] = engine.lower()
@@ -521,6 +537,7 @@ class Notebook(requests.Session):
             self.hive_settings["hive.input.format"] = "org.apache.hadoop.hive.ql.io.CombineHiveInputFormat"
         else:
             self.hive_settings["hive.input.format"] = "org.apache.hadoop.hive.ql.io.HiveInputFormat"
+
         self._set_hive(self.hive_settings)
 
     def set_memory_multiplier(self, multiplier: float):
@@ -713,7 +730,7 @@ class NotebookResult(object):
         self._progressbar_format["desc"] = PROGRESSBAR["desc"].format(name=self.name, result="result")
         self.data = None
         self.full_log = ""
-        self._last_check = time.perf_counter()
+        self._last_check = None
         self._logs_row = 0
         self._app_ids = set()
         self._app_id = ''
@@ -762,7 +779,11 @@ class NotebookResult(object):
 
         # init time counter
         cur_check = time.perf_counter()
-        will_update_status = cur_check - self._last_check > update_interval
+        if self._last_check is None:
+            self._last_check = cur_check
+            will_update_status = True
+        else:
+            will_update_status = cur_check - self._last_check > update_interval
 
         # fetch cloud log by default
         try:
@@ -970,7 +991,11 @@ class NotebookResult(object):
         res = self._notebook.post(url, data=payload)
         return res
 
-    def to_csv(self, file_name: str = None, encoding="utf-8", total: int = None, progressbar=True,
+    def to_csv(self,
+               file_name: str = None,
+               encoding="utf-8",
+               total: int = None,
+               progressbar=True,
                progressbar_offset=0):
         """
         Download result of executed sql directly into a csv file.

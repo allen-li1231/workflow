@@ -12,6 +12,7 @@ import pandas as pd
 from .hue import Notebook
 from .settings import MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR, EXCEL_ENGINE
 from .hue_download import HueDownload
+from .utils import append_df_to_csv
 from . import logger
 
 __all__ = ["hue", "Notebook", "HueDownload"]
@@ -28,6 +29,7 @@ class hue:
             print("Please provide password:", end='')
             password = input("")
 
+        self.username = username
         self.name = name
         self.description = description
         self.hive_settings = HIVE_PERFORMANCE_SETTINGS.copy() \
@@ -196,10 +198,9 @@ class hue:
                  columns: list = None,
                  column_names: list = None,
                  decrypt_columns: list = None,
-                 limit: int = None,
                  path: str = None,
-                 wait_sec: int = 5,
-                 timeout: float = float("inf")
+                 progressbar: bool = True,
+                 progressbar_offset: int = 0
                  ):
         """
         a refactored version of download_data from WxCustom
@@ -211,29 +212,85 @@ class hue:
                         default to all columns
         :param column_names: rename column names if needed
         :param decrypt_columns: columns to be decrypted
-        :param limit: the maximum number of records to be downloaded
-                      default to all records
         :param path: output file if specified.
                      default to return Pandas.DataFrame without saving data to local
                      when save file in .csv, the method is designed to download large table in low memory
-        :param wait_sec: time interval while waiting server for preparing for download
-                         default to 5 seconds
-        :param timeout: maximum seconds to wait for the server preparation
-                       default to wait indefinitely
+        :param progressbar: whether to show a progressbar
+        :param progressbar_offset: position of tqdm progressbar
 
         :return: Pandas.DataFrame if path is not specified,
                  otherwise output file to path and return None
         """
-        return self.hue_download.download(
-            table,
-            reason,
-            columns,
-            column_names,
-            decrypt_columns,
-            limit,
-            path,
-            wait_sec,
-            timeout)
+
+        if path:
+            dir_path = os.path.dirname(path)
+            if not os.path.exists(dir_path):
+                raise NotADirectoryError(f"path does not exist: '{path}'")
+
+        table_rows = (self
+            .run_sql(f"select count(*) from {table}", progressbar=False)
+            .fetchall(progressbar=False)["data"][0][0])
+        if not isinstance(table_rows, int) or table_rows <= 1e5:
+            return self.hue_download.download(
+                table=table,
+                reason=reason,
+                columns=columns,
+                column_names=column_names,
+                decrypt_columns=decrypt_columns,
+                path=path)
+
+        self.log.info(f"downloading large table '{table}'. split into chunks and batch download")
+        # pre-execute preparation
+        database, dot, _ = table.rpartition('.')
+        str_tmp_table = f"{database}.{self.username}" if len(dot) else f"{self.username}"
+        str_tmp_table += "_tmp_{}"
+        str_create_tmp_table = "create table {} like " + table
+        str_drop_tmp_table = "drop table if exists {}"
+        lst_tmp_tables = []
+        lst_create_tmp_table = []
+        lst_drop_tmp_table = []
+        str_insert_tmp_table_query = f"from (select *, ROW_NUMBER() OVER () as tmp_row from {table}) t"
+        for i in range(1, table_rows + 1, 100000):
+            tmp_table = str_tmp_table.format(int(time.time() * 1000))
+            lst_tmp_tables.append(tmp_table)
+            lst_create_tmp_table.append(str_create_tmp_table.format(tmp_table))
+            lst_drop_tmp_table.append(str_drop_tmp_table.format(tmp_table))
+            str_insert_tmp_table_query += \
+                f"\ninsert into table {tmp_table} select `(tmp_row)?+.+` where tmp_row between {i} and {i + 99999}"
+
+            time.sleep(1e-3)
+
+        self.log.info(f"creating temporary table for '{table}'")
+        try:
+            self.run_sqls(lst_create_tmp_table, progressbar=False)
+            self.hue_sys.set_backtick(as_regex=True)
+            self.run_sql(str_insert_tmp_table_query, progressbar=progressbar, progressbar_offset=progressbar_offset)
+
+            self.log.info("downloading chunks")
+            lst_paths = [f"{path}.wfdl{i}" for i in range(len(lst_tmp_tables))]
+            self.batch_download(lst_tmp_tables,
+                                reasons=reason,
+                                columns=[columns] * len(lst_tmp_tables),
+                                decrypt_columns=[decrypt_columns] * len(lst_tmp_tables),
+                                paths=lst_paths,
+                                progressbar=progressbar,
+                                progressbar_offset=progressbar_offset)
+        except Exception as e:
+            self.run_sqls(lst_drop_tmp_table, progressbar=False)
+            self.hue_sys.set_backtick(as_regex=False)
+            raise e
+
+        self.log.info("merging chunks")
+        if os.path.isfile(path):
+            os.remove(path)
+
+        for excel in lst_paths:
+            df = pd.read_csv(excel, encoding="utf-8")
+            append_df_to_csv(path, df, encoding="utf-8", index=False)
+            os.remove(excel)
+
+        self.log.info("cleaning up caches")
+        self.run_sqls(lst_drop_tmp_table, progressbar=False)
 
     def batch_download(self,
                        tables: list,
@@ -243,6 +300,7 @@ class hue:
                        decrypt_columns: list = None,
                        paths: list = None,
                        n_jobs: int = 5,
+                       use_hue: bool = False,
                        progressbar: bool = True,
                        progressbar_offset: int = 0
                        ):
@@ -260,15 +318,16 @@ class hue:
                       when save file in .csv, the method is designed to download large table in low memory
         :param n_jobs: maximum concurrent download tasks
                        default to 5
+        :param use_hue: whether to fetch data from hue
         :param progressbar: whether to show a progressbar
-        :param progressbar_offset: pr
+        :param progressbar_offset: position of tqdm progressbar
 
         :return: Pandas.DataFrame if paths are not specified,
                  otherwise output files to path and return None
         """
 
         if decrypt_columns is not None \
-                and any(len(cols) for cols in decrypt_columns) \
+                and any(decrypt_columns) \
                 and reasons is None:
             raise TypeError("must specify reason if there has any table's column needs to decrypt")
 
@@ -277,11 +336,12 @@ class hue:
                   columns if columns and any(columns) else [None] * len(tables),
                   column_names if column_names and any(column_names) else [None] * len(tables),
                   decrypt_columns if decrypt_columns and any(decrypt_columns) else [None] * len(tables),
-                  paths if paths and any(paths) else [None] * len(tables)]
+                  paths if paths and any(paths) else [None] * len(tables),
+                  [use_hue] * len(tables)]
 
         lst_future = []
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:
-            for i, (table, reason, cols, col_names, decrypt_cols, path) \
+            for i, (table, reason, cols, col_names, decrypt_cols, path, uh) \
                     in enumerate(zip(*params)):
                 lst_future.append(executor.submit(
                     self.get_table,
@@ -291,6 +351,7 @@ class hue:
                     column_names=col_names,
                     decrypt_columns=decrypt_cols,
                     path=path,
+                    use_hue=uh,
                     new_notebook=True,
                     progressbar=False)
                 )
@@ -300,11 +361,12 @@ class hue:
                 setup_pbar["desc"] = "batch downloading"
                 pbar = tqdm(total=len(lst_future), miniters=0, position=progressbar_offset, **setup_pbar)
 
-            lst_result = [None] * len(lst_future)
-            while any(result is None for result in lst_result):
+            # won't work only if returned value is False
+            lst_result = [False] * len(lst_future)
+            while any(result == False for result in lst_result):
                 time.sleep(1)
                 for i, future in enumerate(lst_future):
-                    if lst_result[i] is None and not future.running():
+                    if lst_result[i] == False and not future.running():
                         try:
                             lst_result[i] = future.result()
                         except Exception as e:
@@ -375,6 +437,7 @@ class hue:
 
         :return: str, name of uploaded table
         """
+
         uploaded_table = self.hue_download.upload(data=data,
                                                   reason=reason,
                                                   columns=columns,
@@ -442,10 +505,11 @@ class hue:
                   column_names: list = None,
                   decrypt_columns: list = None,
                   path: str = None,
+                  use_hue: bool = False,
                   new_notebook: bool = False,
+                  rows_per_fetch: int = 32768,
                   progressbar: bool = True,
-                  progressbar_offset: int = 0,
-                  rows_per_fetch: int = 32768
+                  progressbar_offset: int = 0
                   ):
         """
         get data from Hue to local as pandas dataframe
@@ -457,24 +521,23 @@ class hue:
         :param column_names: rename column names if needed
         :param decrypt_columns: columns to be decrypted
         :param path: default None, path to save table data, not to save table if None
+        :param use_hue: default False, whether try to fetch specified data from hue
         :param new_notebook: default False, whether to open a new Notebook, this is not designed for user use
+        :param rows_per_fetch: rows to fetch per request, tweak it if encounter "Too many sessions" error
         :param progressbar: whether to show progress bar during waiting
         :param progressbar_offset: use this parameter to control sql progressbar positions
-        :param rows_per_fetch: rows to fetch per request, tweak it if encounter "Too many sessions" error
 
         :return: Pandas.DataFrame
         """
-        if path:
-            dir_ = os.path.dirname(path)
-            if not os.path.exists(dir_):
-                self.log.error(f"directory '{dir_}' does not exist")
-                raise NotADirectoryError(f"directory '{dir_}' does not exist")
-            suffix = os.path.basename(path).rpartition('.')[-1]
-            if suffix not in ('xlsx', 'csv', 'xls', 'xlsm'):
-                self.log.error(f"data type not understood: '{suffix}' in path '{path}'")
-                raise TypeError(f"data type not understood: '{suffix}' in path '{path}'")
 
-        if decrypt_columns is None or len(decrypt_columns) == 0:
+        if path:
+            dir_path = os.path.dirname(path)
+            if not os.path.exists(dir_path):
+                self.log.error(f"directory '{dir_path}' does not exist")
+                raise NotADirectoryError(f"directory '{dir_path}' does not exist")
+            suffix = os.path.basename(path).rpartition('.')[-1]
+
+        if use_hue and (decrypt_columns is None or len(decrypt_columns) == 0):
             sql = f"select {','.join(columns) if columns else '*'} from {table};"
             res = self.run_sql(sql=sql,
                                progressbar=progressbar,
@@ -501,18 +564,18 @@ class hue:
             if path:
                 if suffix in ('xlsx', 'xls', 'xlsm'):
                     df.to_excel(path, index=False, engine=EXCEL_ENGINE)
-                elif suffix == 'csv':
+                else:
                     df.to_csv(path, index=False)
             return df
         elif reason is None:
             raise TypeError(f"must specify reason if there has column to be decrypted")
         else:
-            return self.download(table=table,
-                                 reason=reason,
-                                 columns=columns,
-                                 column_names=column_names,
-                                 decrypt_columns=decrypt_columns,
-                                 path=path)
+            return self.hue_download.download(table=table,
+                                              reason=reason,
+                                              columns=columns,
+                                              column_names=column_names,
+                                              decrypt_columns=decrypt_columns,
+                                              path=path)
 
     def kill_app(self, app_id):
         """

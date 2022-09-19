@@ -73,7 +73,19 @@ def read_file_in_chunks(file_object, block_size, chunks=-1):
         chunks -= 1
 
 
-def append_df_to_excel(filename, df, sheet_name='Sheet1', startrow=None,
+def append_df_to_csv(filename, df: pd.DataFrame, **to_csv_kwargs):
+    if 'header' in to_csv_kwargs:
+        to_csv_kwargs.pop('header')
+    if 'mode' in to_csv_kwargs:
+        to_csv_kwargs.pop('mode')
+
+    if not os.path.isfile(filename):
+        df.to_csv(filename, mode='w', header=True, **to_csv_kwargs)
+    else:
+        df.to_csv(filename, mode='a', header=False, **to_csv_kwargs)
+
+
+def append_df_to_excel(filename, df: pd.DataFrame, sheet_name='Sheet1', startrow=None,
                        truncate_sheet=False,
                        **to_excel_kwargs):
     """

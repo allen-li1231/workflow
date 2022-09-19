@@ -48,6 +48,23 @@ class JupyterBase(requests.Session):
         self.log.info(f"Jupyter login successful")
 
     @retry(__name__)
+    def _get_sessions(self):
+        url = self.base_url + "/api/sessions"
+        res = self.get(url)
+        return res
+
+    @retry(__name__)
+    def _get_session_info(self, session_id):
+        url = self.base_url + f"/api/sessions/{session_id}"
+        res = self.get(url)
+        return res
+
+    @retry(__name__)
+    def _close_session(self, session_id):
+        url = self.base_url + f"/api/sessions/{session_id}"
+        res = self.delete(url)
+
+    @retry(__name__)
     def _get_terminals(self):
         url = self.base_url + f"/api/terminals?{int(datetime.now().timestamp() * 10 ** 3)}"
         res = self.get(url)

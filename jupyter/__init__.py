@@ -122,6 +122,20 @@ class Jupyter(JupyterBase):
             pbar.close()
         return res.status_code
 
+    def new_session(self):
+        return self._new_terminal().json()["name"]
+
+    def close_session(self, session_id):
+        res = self._close_session(session_id=session_id)
+        if res.status_code != 204:
+            self.log.warning(res.text)
+
+        return res.status_code
+
+    def get_sessions(self):
+        res = self._get_sessions()
+        return res.json()
+
     def new_terminal(self):
         return self._new_terminal().json()["name"]
 
