@@ -363,7 +363,7 @@ class hue:
                         use_hue=uh,
                         new_notebook=True,
                         progressbar=False)
-                ]: i
+                ] = i
 
             if progressbar:
                 setup_pbar = PROGRESSBAR.copy()
@@ -371,7 +371,7 @@ class hue:
                 pbar = tqdm(total=len(d_future), miniters=0, position=progressbar_offset, **setup_pbar)
 
             # won't work only if returned value is False
-            lst_result = [False] * len(d_future)
+            lst_result = [None] * len(d_future)
             for future in as_completed(d_future):
                 try:
                     lst_result[d_future[future]] = future.result()
@@ -380,7 +380,7 @@ class hue:
                     self.log.warning(
                         f"due to download exception above, "
                         f"table '{table}' download is cancelled")
-                    lst_result[i] = future.exception()
+                    lst_result[d_future[future]] = future.exception()
 
                 if progressbar:
                     pbar.update(1)
