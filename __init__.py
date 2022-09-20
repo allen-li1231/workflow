@@ -368,10 +368,10 @@ class hue:
             if progressbar:
                 setup_pbar = PROGRESSBAR.copy()
                 setup_pbar["desc"] = "batch downloading"
-                pbar = tqdm(total=len(lst_future), miniters=0, position=progressbar_offset, **setup_pbar)
+                pbar = tqdm(total=len(d_future), miniters=0, position=progressbar_offset, **setup_pbar)
 
             # won't work only if returned value is False
-            lst_result = [False] * len(lst_future)
+            lst_result = [False] * len(d_future)
             for future in as_completed(d_future):
                 try:
                     lst_result[d_future[future]] = future.result()
