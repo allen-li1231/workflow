@@ -6,7 +6,7 @@ import time
 from typing import Union
 import logging
 from tqdm.auto import tqdm
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
 from .hue import Notebook
@@ -260,6 +260,11 @@ class hue:
 
             time.sleep(1e-3)
 
+        b_backtick_as_regex = False
+        if "hive.support.quoted.identifiers" in self.hue_sys.hive_settings \
+                and self.hue_sys.hive_settings["hive.support.quoted.identifiers"] == "none":
+            b_backtick_as_regex = True
+
         self.log.info(f"creating temporary table for '{table}'")
         try:
             self.run_sqls(lst_create_tmp_table, progressbar=False)
@@ -277,7 +282,8 @@ class hue:
                                 progressbar_offset=progressbar_offset)
         except Exception as e:
             self.run_sqls(lst_drop_tmp_table, progressbar=False)
-            self.hue_sys.set_backtick(as_regex=False)
+            if not b_backtick_as_regex:
+                self.hue_sys.set_backtick(as_regex=False)
             raise e
 
         self.log.info("merging chunks")
@@ -291,6 +297,8 @@ class hue:
 
         self.log.info("cleaning up caches")
         self.run_sqls(lst_drop_tmp_table, progressbar=False)
+        if not b_backtick_as_regex:
+            self.hue_sys.set_backtick(as_regex=False)
 
     def batch_download(self,
                        tables: list,
@@ -299,7 +307,7 @@ class hue:
                        column_names: list = None,
                        decrypt_columns: list = None,
                        paths: list = None,
-                       n_jobs: int = 5,
+                       n_jobs: int = 10,
                        use_hue: bool = False,
                        progressbar: bool = True,
                        progressbar_offset: int = 0
@@ -339,22 +347,23 @@ class hue:
                   paths if paths and any(paths) else [None] * len(tables),
                   [use_hue] * len(tables)]
 
-        lst_future = []
+        d_future = {}
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:
             for i, (table, reason, cols, col_names, decrypt_cols, path, uh) \
                     in enumerate(zip(*params)):
-                lst_future.append(executor.submit(
-                    self.get_table,
-                    table=table,
-                    reason=reason,
-                    columns=cols,
-                    column_names=col_names,
-                    decrypt_columns=decrypt_cols,
-                    path=path,
-                    use_hue=uh,
-                    new_notebook=True,
-                    progressbar=False)
-                )
+                d_future[
+                    executor.submit(
+                        self.get_table,
+                        table=table,
+                        reason=reason,
+                        columns=cols,
+                        column_names=col_names,
+                        decrypt_columns=decrypt_cols,
+                        path=path,
+                        use_hue=uh,
+                        new_notebook=True,
+                        progressbar=False)
+                ]: i
 
             if progressbar:
                 setup_pbar = PROGRESSBAR.copy()
@@ -363,20 +372,18 @@ class hue:
 
             # won't work only if returned value is False
             lst_result = [False] * len(lst_future)
-            while any(result == False for result in lst_result):
-                time.sleep(1)
-                for i, future in enumerate(lst_future):
-                    if lst_result[i] == False and not future.running():
-                        try:
-                            lst_result[i] = future.result()
-                        except Exception as e:
-                            self.log.warning(e)
-                            self.log.warning(
-                                f"due to download exception above, "
-                                f"table '{table}' download is cancelled")
-                            lst_result[i] = future.exception()
-                        if progressbar:
-                            pbar.update(1)
+            for future in as_completed(d_future):
+                try:
+                    lst_result[d_future[future]] = future.result()
+                except Exception as e:
+                    self.log.warning(e)
+                    self.log.warning(
+                        f"due to download exception above, "
+                        f"table '{table}' download is cancelled")
+                    lst_result[i] = future.exception()
+
+                if progressbar:
+                    pbar.update(1)
 
                 pbar.refresh()
 
@@ -465,7 +472,9 @@ class hue:
                     columns: list = None,
                     column_names: list = None,
                     encrypt_columns: list = None,
-                    drop: bool = True
+                    drop: bool = True,
+                    progressbar: bool = True,
+                    progressbar_offset: int = 0
                     ):
         """
         Upload and insert data into existing table
@@ -478,6 +487,8 @@ class hue:
         :param encrypt_columns: list, list of columns to encrypt during upload
         :param reason: str, upload reason
         :param drop: whether to drop uploaded temporary table once insertion succeeds
+        :param progressbar: whether to show procedure progressbars
+        :param progressbar_offset: position of tqdm progressbars
 
         :return destination table name
         """
@@ -487,14 +498,16 @@ class hue:
                                      column_names=column_names,
                                      encrypt_columns=encrypt_columns)
         try:
-            self.run_sql(f'insert into table {table_name} select * from {uploaded_table}')
+            self.run_sql(f'insert into table {table_name} select * from {uploaded_table}',
+                         progressbar=progressbar,
+                         progressbar_offset=progressbar_offset)
         except Exception as e:
             self.log.warning(e)
             self.log.warning('upload failed, the data is uploaded to the table ' + uploaded_table)
             return uploaded_table
 
         if drop:
-            self.run_sql("drop table if exists " + uploaded_table)
+            self.run_sql("drop table if exists " + uploaded_table, progressbar=False)
 
         return table_name
 
