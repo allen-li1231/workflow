@@ -310,7 +310,8 @@ class hue:
                        n_jobs: int = 10,
                        use_hue: bool = False,
                        progressbar: bool = True,
-                       progressbar_offset: int = 0
+                       progressbar_offset: int = 0,
+                       **info_kwargs
                        ):
         """
         Batch downloading tasks
@@ -329,6 +330,7 @@ class hue:
         :param use_hue: whether to fetch data from hue
         :param progressbar: whether to show a progressbar
         :param progressbar_offset: position of tqdm progressbar
+        :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
 
         :return: Pandas.DataFrame if paths are not specified,
                  otherwise output files to path and return None
@@ -344,12 +346,11 @@ class hue:
                   columns if columns and any(columns) else [None] * len(tables),
                   column_names if column_names and any(column_names) else [None] * len(tables),
                   decrypt_columns if decrypt_columns and any(decrypt_columns) else [None] * len(tables),
-                  paths if paths and any(paths) else [None] * len(tables),
-                  [use_hue] * len(tables)]
+                  paths if paths and any(paths) else [None] * len(tables)]
 
         d_future = {}
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:
-            for i, (table, reason, cols, col_names, decrypt_cols, path, uh) \
+            for i, (table, reason, cols, col_names, decrypt_cols, path) \
                     in enumerate(zip(*params)):
                 d_future[
                     executor.submit(
@@ -360,9 +361,10 @@ class hue:
                         column_names=col_names,
                         decrypt_columns=decrypt_cols,
                         path=path,
-                        use_hue=uh,
+                        use_hue=use_hue,
                         new_notebook=True,
-                        progressbar=False)
+                        progressbar=False,
+                        **info_kwargs)
                 ] = i
 
             if progressbar:
@@ -424,7 +426,8 @@ class hue:
                encrypt_columns: list = None,
                wait_sec: int = 5,
                timeout: float = float("inf"),
-               table_name: str = None
+               table_name: str = None,
+               **info_kwargs
                ):
         """
         a refactored version of upload_data from WxCustom
@@ -441,6 +444,7 @@ class hue:
         :param timeout: maximum seconds to wait for the server preparation
                        default to wait indefinitely
         :param table_name: str, user can nominate final table name
+        :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
 
         :return: str, name of uploaded table
         """
@@ -451,7 +455,8 @@ class hue:
                                                   column_names=column_names,
                                                   encrypt_columns=encrypt_columns,
                                                   wait_sec=wait_sec,
-                                                  timeout=timeout)
+                                                  timeout=timeout,
+                                                  **info_kwargs)
         if table_name is None:
             self.log.info('data has uploaded to table ' + uploaded_table)
             return uploaded_table
@@ -522,7 +527,8 @@ class hue:
                   new_notebook: bool = False,
                   rows_per_fetch: int = 32768,
                   progressbar: bool = True,
-                  progressbar_offset: int = 0
+                  progressbar_offset: int = 0,
+                  **info_kwargs
                   ):
         """
         get data from Hue to local as pandas dataframe
@@ -539,6 +545,7 @@ class hue:
         :param rows_per_fetch: rows to fetch per request, tweak it if encounter "Too many sessions" error
         :param progressbar: whether to show progress bar during waiting
         :param progressbar_offset: use this parameter to control sql progressbar positions
+        :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
 
         :return: Pandas.DataFrame
         """
@@ -588,7 +595,8 @@ class hue:
                                               columns=columns,
                                               column_names=column_names,
                                               decrypt_columns=decrypt_columns,
-                                              path=path)
+                                              path=path,
+                                              **info_kwargs)
 
     def kill_app(self, app_id):
         """

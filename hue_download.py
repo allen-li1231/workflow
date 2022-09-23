@@ -195,7 +195,8 @@ class HueDownload(requests.Session):
                  limit: int = None,
                  path: str = None,
                  wait_sec: int = 5,
-                 timeout: float = float("inf")
+                 timeout: float = float("inf"),
+                 **info_kwargs
                  ):
         """
         a refactored version of download_data from WxCustom
@@ -216,6 +217,8 @@ class HueDownload(requests.Session):
                          default to 5 seconds
         :param timeout: maximum seconds to wait for the server preparation
                        default to wait indefinitely
+        :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
+
         :return: Pandas.DataFrame if path is not specified,
                  otherwise output a csv file to path and return None
         """
@@ -246,7 +249,7 @@ class HueDownload(requests.Session):
         start_time = time.perf_counter()
         while time.perf_counter() - start_time < timeout:
             time.sleep(wait_sec)
-            download_info = self.get_info_by_id(download_id, info_type="download")
+            download_info = self.get_info_by_id(download_id, info_type="download", **info_kwargs)
             if download_info["status"] == 0:
                 # status: submit
                 self.log.info(f"\rprepare {table} elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
@@ -339,7 +342,8 @@ class HueDownload(requests.Session):
                encrypt_columns: list = None,
                nrows: int = None,
                wait_sec: int = 5,
-               timeout: float = float("inf")
+               timeout: float = float("inf"),
+               **info_kwargs
                ):
         """
         a refactored version of upload_data from WxCustom
@@ -356,8 +360,11 @@ class HueDownload(requests.Session):
                          default to 5 seconds
         :param timeout: maximum seconds to wait for the server preparation
                         default to wait indefinitely
+        :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
+
         :return: str, name of uploaded table
         """
+
         if isinstance(data, (pd.DataFrame, pd.Series)):
             buffer = StringIO()
             buffer.name = "pandas_dataframe"
@@ -404,7 +411,7 @@ class HueDownload(requests.Session):
         start_time = time.perf_counter()
         while time.perf_counter() - start_time < timeout:
             time.sleep(wait_sec)
-            upload_info = self.get_info_by_id(id_, info_type="upload")
+            upload_info = self.get_info_by_id(id_, info_type="upload", **info_kwargs)
             if upload_info["status"] == 0:
                 # status: submit
                 self.log.info(f"prepare upload elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
