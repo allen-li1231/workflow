@@ -218,6 +218,7 @@ class HueDownload(requests.Session):
         :param timeout: maximum seconds to wait for the server preparation
                        default to wait indefinitely
         :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
+                            (useful when downloadables cannot be found in just one page)
 
         :return: Pandas.DataFrame if path is not specified,
                  otherwise output a csv file to path and return None
@@ -361,6 +362,7 @@ class HueDownload(requests.Session):
         :param timeout: maximum seconds to wait for the server preparation
                         default to wait indefinitely
         :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
+                            (useful when upload contents cannot be found in just one page)
 
         :return: str, name of uploaded table
         """
@@ -428,15 +430,20 @@ class HueDownload(requests.Session):
 
     def get_info_by_id(self, id_: int, info_type, **kwargs):
         if info_type == 'upload' or info_type == 1:
-            res = self._get_upload_info(**kwargs)
+            func_info = self._get_upload_info
         elif info_type == 'download' or info_type == 0:
-            res = self._get_download_info(**kwargs)
+            func_info = self._get_download_info
         else:
-            raise TypeError(f"expecting type to be either 'upload'(1), 'download'(0), got {info_type}")
-        r_json = res.json()
-        for content in r_json["content"]:
-            if content["id"] == id_:
-                return content
+            raise TypeError(f"expecting info_type to be either 'upload' or 1, 'download' or 0, got {info_type}")
+
+        pages = kwargs["page"] if "page" in kwargs else 0
+        for p in range(pages + 1):
+            kwargs["page"] = p
+            res = func_info(**kwargs)
+            r_json = res.json()
+            for content in r_json["content"]:
+                if content["id"] == id_:
+                    return content
 
         raise LookupError(f"cannot get info with download id: {id_}")
 

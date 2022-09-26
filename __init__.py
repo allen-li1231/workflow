@@ -200,7 +200,8 @@ class hue:
                  decrypt_columns: list = None,
                  path: str = None,
                  progressbar: bool = True,
-                 progressbar_offset: int = 0
+                 progressbar_offset: int = 0,
+                 **info_kwargs
                  ):
         """
         a refactored version of download_data from WxCustom
@@ -217,6 +218,8 @@ class hue:
                      when save file in .csv, the method is designed to download large table in low memory
         :param progressbar: whether to show a progressbar
         :param progressbar_offset: position of tqdm progressbar
+        :param info_kwargs: to modify default get_info_by_id parameters, add argument pairs here
+                            (useful when downloadables cannot be found in just one page)
 
         :return: Pandas.DataFrame if path is not specified,
                  otherwise output file to path and return None
@@ -237,7 +240,8 @@ class hue:
                 columns=columns,
                 column_names=column_names,
                 decrypt_columns=decrypt_columns,
-                path=path)
+                path=path,
+                **info_kwargs)
 
         self.log.info(f"downloading large table '{table}'. split into chunks and batch download")
         # pre-execute preparation
@@ -279,7 +283,8 @@ class hue:
                                 decrypt_columns=[decrypt_columns] * len(lst_tmp_tables),
                                 paths=lst_paths,
                                 progressbar=progressbar,
-                                progressbar_offset=progressbar_offset)
+                                progressbar_offset=progressbar_offset,
+                                **info_kwargs)
         except Exception as e:
             self.run_sqls(lst_drop_tmp_table, progressbar=False)
             if not b_backtick_as_regex:
@@ -497,6 +502,7 @@ class hue:
 
         :return destination table name
         """
+
         uploaded_table = self.upload(data=data,
                                      reason=reason,
                                      columns=columns,
@@ -600,7 +606,7 @@ class hue:
 
     def kill_app(self, app_id):
         """
-        Kill Yarn Application by app id
+        Kill Yarn Application by app id accordingly
 
         :param app_id: str or iterable of app_ids
         """

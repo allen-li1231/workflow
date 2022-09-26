@@ -59,8 +59,10 @@ def reduce_mem_usage(df: pd.DataFrame):
 
 
 def read_file_in_chunks(file_object, block_size, chunks=-1):
-    """Lazy function (generator) to read a file piece by piece.
-    Default chunk size: 25MB."""
+    """
+    Lazy function (generator) to read a file piece by piece.
+    Default chunk size: 25MB.
+    """
     i = 1
     while chunks:
         data = file_object.read(block_size)
@@ -74,6 +76,17 @@ def read_file_in_chunks(file_object, block_size, chunks=-1):
 
 
 def append_df_to_csv(filename, df: pd.DataFrame, **to_csv_kwargs):
+    """
+        Append a DataFrame [df] to existing csv file [filename].
+    If [filename] doesn't exist, then this function will create it.
+
+    @param filename: csv path (Example: '/path/to/file.csv')
+    @param df: DataFrame to save to file
+    @param to_csv_kwargs: arguments which will be passed to `DataFrame.to_excel()`
+                          [can be a dictionary]
+    @return: None
+    """
+
     if 'header' in to_csv_kwargs:
         to_csv_kwargs.pop('header')
     if 'mode' in to_csv_kwargs:
