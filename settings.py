@@ -91,3 +91,8 @@ EXCEL_ENGINE = "xlsxwriter" if importlib.util.find_spec("xlsxwriter") else "open
 JUPYTER_URL = 'http://10.19.181.26:9999'
 JUPYTER_TOKEN = "fengkong"
 JUPYTER_MAX_UPLOAD_SIZE = 25 * 1024 * 1024
+
+# jump_server
+JUMP_SERVER_HOST = "10.1.82.105"
+JUMP_SERVER_PORT = 22
+JUMP_SERVER_BACKEND_HOST = "10.18.22.95"
