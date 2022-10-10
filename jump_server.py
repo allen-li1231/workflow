@@ -10,6 +10,7 @@ class SSH(paramiko.SSHClient):
                  username, password,
                  jump_server_username, jump_server_password,
                  host=None, port=None):
+
         super().__init__()
         self.load_system_host_keys()
         self.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -29,13 +30,11 @@ class SSH(paramiko.SSHClient):
         self.execute(username)
         time.sleep(1)
         self.execute(password)
-        self.execute("source activate")
-        time.sleep(1)
 
     def print_forever(self, wait=1):
         while True:
             msg = self.shell.recv(-1).decode()
-            if len(msg) > 0:
+            if len(msg.strip()) > 0:
                 print(msg)
                 self.msg = msg
 
