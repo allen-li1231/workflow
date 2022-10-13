@@ -658,7 +658,8 @@ class Notebook(requests.Session):
         new_nb.verbose = self.verbose if verbose is None else verbose
 
         new_nb.log = logging.getLogger(__name__ + f".Notebook[{name}]")
-        logger.set_stream_log_level(new_nb.log, verbose=new_nb.verbose)
+        if new_nb.verbose:
+            logger.set_stream_log_level(new_nb.log, verbose=new_nb.verbose)
 
         if recreate_session:
             new_nb._prepare_notebook(name, description,
@@ -724,7 +725,8 @@ class NotebookResult(object):
         self.verbose = notebook.verbose
 
         self.log = logging.getLogger(__name__ + f".NotebookResult[{self.name}]")
-        logger.set_stream_log_level(self.log, verbose=self.verbose)
+        if self.verbose:
+            logger.set_stream_log_level(self.log, verbose=self.verbose)
 
         self._progressbar_format = PROGRESSBAR.copy()
         self._progressbar_format["desc"] = PROGRESSBAR["desc"].format(name=self.name, result="result")

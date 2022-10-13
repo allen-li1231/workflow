@@ -36,7 +36,8 @@ class hue:
             if hive_settings is None else hive_settings
         self.verbose = verbose
         self.log = logging.getLogger(__name__ + ".hue")
-        logger.set_stream_log_level(self.log, verbose=verbose)
+        if self.verbose:
+            logger.set_stream_log_level(self.log, verbose=verbose)
 
         self.hue_sys = Notebook(username, password,
                                 name=name,
