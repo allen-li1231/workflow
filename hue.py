@@ -317,7 +317,6 @@ class Notebook(requests.Session):
                 "directory_uuid": ""
                 }
             )
-        self.log.debug(f"create notebook response: {res.text}")
         return res
 
     @ensure_login
@@ -350,7 +349,6 @@ class Notebook(requests.Session):
             cookies=self.cookies,
             data=payload
         )
-        self.log.debug(f"create session response: {r.text}")
         r_json = r.json()
         self.session = r_json["session"]
         return r
@@ -494,7 +492,6 @@ class Notebook(requests.Session):
                         data={"notebook": json.dumps(self.notebook),
                               "snippet": json.dumps(self.snippet)},
                         )
-        self.log.debug(f"_execute returns: {res.text}")
         return res
 
     def set_priority(self, priority: str):
@@ -587,7 +584,6 @@ class Notebook(requests.Session):
                         data={"notebook": json.dumps(self.notebook),
                               "snippet": json.dumps(self.snippet)},
                         )
-        self.log.debug(f"cancel statement response: {res.text}")
         return res
 
     @ensure_login
@@ -599,7 +595,6 @@ class Notebook(requests.Session):
                         data={"notebook": json.dumps(self.notebook),
                               "snippet": json.dumps(self.snippet)},
                         )
-        self.log.debug(f"close statement response: {res.text}")
         return res
 
     @retry(__name__)
@@ -610,7 +605,6 @@ class Notebook(requests.Session):
         res = self.post(url,
                         data={"session": json.dumps(self.session)}
                         )
-        self.log.debug(f"close session response: {res.text}")
         return res
 
     @retry(__name__)
@@ -625,7 +619,6 @@ class Notebook(requests.Session):
         res = self.post(url,
                         data={"notebook": json.dumps(self.notebook)}
                         )
-        self.log.debug(f"close notebook response: {res.text}")
         return res
 
     def logout(self):
@@ -683,7 +676,6 @@ class Notebook(requests.Session):
                             "notebook": json.dumps(self.notebook),
                             "doc_type": "hive"
                             })
-        self.log.debug(f"clear history response: {res.text}")
         return res
 
     def clear_history(self, simple=False):
@@ -764,7 +756,6 @@ class NotebookResult(object):
             "snippet": json.dumps(self.snippet)
         }
         res = self._notebook.post(url, data=payload)
-        self.log.debug(f"_check status response: {res.text}")
         return res
 
     def check_status(self, return_log=False, update_interval=60.):
