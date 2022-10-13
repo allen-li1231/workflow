@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 
-
 root = logging.getLogger("workflow")
 root.setLevel(logging.DEBUG)
 
@@ -10,7 +9,8 @@ root.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s-%(name)s-%(levelname)s %(message)s')
 
 # create file and console handler and set level to debug
-fh = logging.FileHandler(os.path.join(os.getcwd(), 'workflow.log'))
+log_file = os.path.join(os.getcwd(), 'workflow.log')
+fh = logging.FileHandler(log_file)
 fh.setLevel(logging.DEBUG)
 fh.setFormatter(formatter)
 
