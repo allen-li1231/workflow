@@ -2,7 +2,7 @@ import time
 import sys
 import cx_Oracle
 import paramiko
-from threading import Thread
+import threading
 
 from .settings import (JUMP_SERVER_HOST, JUMP_SERVER_PORT, JUMP_SERVER_BACKEND_HOST,
                        JUMP_SERVER_PLSQL_HOST, JUMP_SERVER_PLSQL_SERVICE_NAME)
@@ -26,7 +26,7 @@ class SSH(paramiko.SSHClient):
         self.msg = ''
         self.file = file
 
-        self.print_thread = Thread(target=self.print_forever, args=())
+        self.print_thread = threading.Thread(target=self.print_forever, args=())
         self.print_thread.setDaemon(True)
         self.print_thread.start()
 
@@ -38,12 +38,13 @@ class SSH(paramiko.SSHClient):
         self.execute(password)
 
     def print_forever(self, wait=1):
-        while True:
+        this = threading.currentThread()
+        while getattr(this, "keep_running", True):
             msg = self.shell.recv(-1).decode()
             if len(msg.strip()) > 0:
                 print(msg, file=self.file)
                 self.msg = msg
-            if "timed out waiting for input: auto-logout" in msg:
+            if "auto-logout" in msg:
                 return
 
             time.sleep(wait)
@@ -52,6 +53,9 @@ class SSH(paramiko.SSHClient):
         self.shell.send(f"{command}\r")
 
     def close(self):
+        self.execute("logout")
+        self.execute("exit")
+        self.print_thread.keep_running = False
         self.print_thread.join()
         super().close()
 
@@ -82,7 +86,7 @@ class Oracle:
                             or ValueError("service_name not provided in argument or in settings")
         try:
             self.db = cx_Oracle.connect(username, password,
-                                        hostname + '/' + service_name)
+                                        self.hostname + '/' + self.service_name)
             self.db.autocommit = True
         except cx_Oracle.DatabaseError as e:
             # Log error as appropriate
