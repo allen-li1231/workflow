@@ -323,7 +323,7 @@ class HueDownload(requests.Session):
             upload_info = self.get_info_by_id(id_, info_type="upload")
             if upload_info["status"] == 0:
                 # status: submit
-                self.log.info(f"prepare upload elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
+                self.log.info(f"setup upload elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
                 continue
             if upload_info["status"] == 1:
                 # status: failed
@@ -416,7 +416,7 @@ class HueDownload(requests.Session):
             upload_info = self.get_info_by_id(id_, info_type="upload", **info_kwargs)
             if upload_info["status"] == 0:
                 # status: submit
-                self.log.info(f"prepare upload elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
+                self.log.info(f"setup upload elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
                 continue
             if upload_info["status"] == 1:
                 # status: failed

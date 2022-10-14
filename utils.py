@@ -98,8 +98,12 @@ def append_df_to_csv(filename, df: pd.DataFrame, **to_csv_kwargs):
         df.to_csv(filename, mode='a', header=False, **to_csv_kwargs)
 
 
-def append_df_to_excel(filename, df: pd.DataFrame, sheet_name='Sheet1', startrow=None,
+def append_df_to_excel(filename, df: pd.DataFrame,
+                       sheet_name='Sheet1',
+                       startrow=None,
                        truncate_sheet=False,
+                       date_format=None,
+                       datetime_format=None,
                        **to_excel_kwargs):
     """
     Append a DataFrame [df] to existing Excel file [filename]
@@ -147,7 +151,11 @@ def append_df_to_excel(filename, df: pd.DataFrame, sheet_name='Sheet1', startrow
     if 'header' in to_excel_kwargs:
         to_excel_kwargs.pop('header')
 
-    writer = pd.ExcelWriter(filename, engine='openpyxl', mode='a')
+    writer = pd.ExcelWriter(filename,
+                            engine='openpyxl',
+                            mode='a',
+                            date_format=date_format,
+                            datetime_format=datetime_format)
 
     # try to open an existing workbook
     writer.book = load_workbook(filename)

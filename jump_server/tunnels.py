@@ -1,19 +1,34 @@
 import time
 import sys
 import logging
-import cx_Oracle
 import paramiko
 import threading
 
-from . import logger
-from .settings import (JUMP_SERVER_HOST, JUMP_SERVER_PORT, JUMP_SERVER_BACKEND_HOST,
-                       JUMP_SERVER_PLSQL_HOST, JUMP_SERVER_PLSQL_SERVICE_NAME,
-                       MAX_LEN_PRINT_SQL)
+from workflow import logger
+from settings import JUMP_SERVER_HOST, JUMP_SERVER_PORT, JUMP_SERVER_BACKEND_HOST
 
 paramiko.util.log_to_file(logger.log_file, level=logging.DEBUG)
 
 
-class SSH(paramiko.SSHClient):
+class Tunnel:
+    def setup(self,
+              service,
+              jump_server_username,
+              jump_server_password,
+              host, port,
+              verbose=False):
+        self.host = host
+        self.port = port
+        self.jump_server_username = jump_server_username
+        self._jump_server_password = jump_server_password
+        self.verbose = verbose
+
+        self.log = logging.getLogger(__name__ + f".{service}")
+        if self.verbose:
+            logger.set_stream_log_level(self.log, verbose=self.verbose)
+
+
+class SSH(paramiko.SSHClient, Tunnel):
     def __init__(self,
                  username, password,
                  jump_server_username, jump_server_password,
@@ -23,14 +38,14 @@ class SSH(paramiko.SSHClient):
         self.host = host or JUMP_SERVER_HOST
         self.port = port or JUMP_SERVER_PORT
         self.username = username
-        self.jump_server_username = jump_server_username
         self.msg = ''
         self.file = file
-        self.verbose = verbose
-        self.log = logging.getLogger(__name__ + ".SSH")
-        if self.verbose:
-            logger.set_stream_log_level(self.log, verbose=self.verbose)
-
+        super().setup("SSH",
+                      jump_server_username=jump_server_username,
+                      jump_server_password=jump_server_password,
+                      host=self.host,
+                      port=self.port,
+                      verbose=verbose)
         super().__init__()
         self._login(self.username, password, self.jump_server_username, jump_server_password)
 
@@ -77,6 +92,9 @@ class SSH(paramiko.SSHClient):
         self.log.debug(f"execute shell command: {command}")
         self.shell.send(f"{command}\r")
 
+    def interrupt(self):
+        self.shell.send("\x03")
+
     def close(self):
         self.log.debug(f"close print thread and do logout")
         self.shell.send("logout\r")
@@ -86,7 +104,7 @@ class SSH(paramiko.SSHClient):
         super().close()
 
 
-class SFTP(paramiko.SFTPClient):
+class SFTP(paramiko.SFTPClient, Tunnel):
     def __init__(self,
                  username, password,
                  jump_server_username, jump_server_password,
@@ -95,12 +113,12 @@ class SFTP(paramiko.SFTPClient):
         self.host = host or JUMP_SERVER_HOST
         self.port = port or JUMP_SERVER_PORT
         self.username = username
-        self.jump_server_username = jump_server_username
-        self.verbose = verbose
-        self.log = logging.getLogger(__name__ + ".SFTP")
-
-        if self.verbose:
-            logger.set_stream_log_level(self.log, verbose=self.verbose)
+        super().setup("SFTP",
+                      jump_server_username=jump_server_username,
+                      jump_server_password=jump_server_password,
+                      host=self.host,
+                      port=self.port,
+                      verbose=verbose)
 
         self.log.info(f"logging in for [{username}] on {self.host}")
         t = paramiko.Transport(
@@ -121,78 +139,3 @@ class SFTP(paramiko.SFTPClient):
     def get(self, remotepath, localpath, callback=None):
         self.log.info(f"get '{localpath}' from '{remotepath}")
         super().get(remotepath=remotepath, localpath=localpath, callback=callback)
-
-
-class Oracle:
-    def __init__(self, username, password,
-                 service_name=None, hostname=None,
-                 verbose=False):
-
-        self.verbose = verbose
-        self.log = logging.getLogger(__name__ + ".Oracle")
-        if self.verbose:
-            logger.set_stream_log_level(self.log, verbose=self.verbose)
-
-        """ Connect to the database. """
-        self.hostname = hostname or JUMP_SERVER_PLSQL_HOST \
-                        or ValueError("hostname not provided in argument or in settings")
-        self.service_name = service_name or JUMP_SERVER_PLSQL_SERVICE_NAME \
-                            or ValueError("service_name not provided in argument or in settings")
-        try:
-            service = self.hostname + '/' + self.service_name
-            self.log.info(f"connect PL/SQL server for [{username}] on {service}")
-            self.db = cx_Oracle.connect(username, password, service)
-            self.db.autocommit = True
-        except cx_Oracle.DatabaseError as e:
-            self.log.exception(e)
-            raise e
-        # If the database connection succeeded create the cursor
-        # we-re going to use.
-        self.cursor = self.db.cursor()
-
-    def close(self):
-        """
-        Disconnect from the database. If this fails, for instance
-        if the connection instance doesn't exist, ignore the exception.
-        """
-        try:
-            self.cursor.close()
-            self.db.close()
-        except cx_Oracle.DatabaseError as e:
-            self.log.exception(e)
-            pass
-
-    def execute(self, sql):
-        """
-        Execute whatever SQL statements are passed to the method;
-        commit if specified. Do not specify fetchall() in here as
-        the SQL statement may not be a select.
-        """
-        try:
-            self.log.info(f"execute sql: {sql[:MAX_LEN_PRINT_SQL]}")
-            self.cursor.execute(sql)
-        except cx_Oracle.DatabaseError as e:
-            # Log error as appropriate
-            self.log.exception(e)
-            raise e
-
-    def execute_proc(self, sql):
-        """
-        Execute whatever SQL procedure are passed to the method;
-        commit if specified.
-        """
-        try:
-            self.log.info(f"execute procedure: {sql[:MAX_LEN_PRINT_SQL]}")
-            self.cursor.callproc(sql)
-        except cx_Oracle.DatabaseError as e:
-            # Log error as appropriate
-            self.log.exception(e)
-            raise e
-
-    def fetchall(self):
-        data = self.cursor.fetchall()
-        col_names = []
-        for i in range(0, len(self.cursor.description)):
-            col_names.append(self.cursor.description[i][0])
-
-        return {"data": data, "columns": col_names}
