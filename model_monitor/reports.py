@@ -11,8 +11,10 @@ def binary_classification_report(y_true,
                                  y_score,
                                  x,
                                  threshold,
+                                 bins=10,
                                  sample_weight=None,
                                  label=None,
+                                 cut_method="quantile",
                                  precision=5
                                  ):
     type_y_true, type_y_pred = type_of_target(y_true), type_of_target(y_score)
@@ -32,7 +34,9 @@ def binary_classification_report(y_true,
                                         pos_label=label, sample_weight=sample_weight)
     balanced_acc = balanced_accuracy_score(y_true=y_true, y_pred=y_pred,
                                            sample_weight=sample_weight)
-    binned_stat = bin_test(y_true=y_true, y_pred=y_pred, x=x, precision=precision)
+    binned_stat = bin_test(y_true=y_true, y_pred=y_pred,
+                           x=x, bins=bins,
+                           cut_method=cut_method, precision=precision)
     return {
         "type": "binary",
         "roc": {

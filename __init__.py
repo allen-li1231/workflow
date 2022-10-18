@@ -378,7 +378,7 @@ class hue:
                 setup_pbar["desc"] = "batch downloading"
                 pbar = tqdm(total=len(d_future), miniters=0, position=progressbar_offset, **setup_pbar)
 
-            # won't work only if returned value is False
+            # won't work only if returned value is None
             lst_result = [None] * len(d_future)
             for future in as_completed(d_future):
                 try:
