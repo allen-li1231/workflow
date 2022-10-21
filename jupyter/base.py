@@ -63,6 +63,7 @@ class JupyterBase(requests.Session):
     def _close_session(self, session_id):
         url = self.base_url + f"/api/sessions/{session_id}"
         res = self.delete(url)
+        return res
 
     @retry(__name__)
     def _get_terminals(self):

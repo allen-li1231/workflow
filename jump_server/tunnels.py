@@ -4,10 +4,10 @@ import logging
 import paramiko
 import threading
 
-from workflow import logger
-from settings import JUMP_SERVER_HOST, JUMP_SERVER_PORT, JUMP_SERVER_BACKEND_HOST
+from .. import logger
+from ..settings import JUMP_SERVER_HOST, JUMP_SERVER_PORT, JUMP_SERVER_BACKEND_HOST
 
-paramiko.util.log_to_file(logger.log_file, level=logging.DEBUG)
+paramiko.util.log_to_file(logger.log_file, level=logging.INFO)
 
 
 class Tunnel:
