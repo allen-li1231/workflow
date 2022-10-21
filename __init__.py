@@ -200,6 +200,7 @@ class hue:
                  column_names: list = None,
                  decrypt_columns: list = None,
                  path: str = None,
+                 n_jobs: int = 10,
                  progressbar: bool = True,
                  progressbar_offset: int = 0,
                  **info_kwargs
@@ -217,6 +218,8 @@ class hue:
         :param path: output file if specified.
                      default to return Pandas.DataFrame without saving data to local
                      when save file in .csv, the method is designed to download large table in low memory
+        :param n_jobs: maximum concurrent download tasks
+                       default to 10
         :param progressbar: whether to show a progressbar
         :param progressbar_offset: position of tqdm progressbar
         :param info_kwargs: to modify default get_info_by_id parameters, add argument pairs here
@@ -283,6 +286,7 @@ class hue:
                                 columns=[columns] * len(lst_tmp_tables),
                                 decrypt_columns=[decrypt_columns] * len(lst_tmp_tables),
                                 paths=lst_paths,
+                                n_jobs=n_jobs,
                                 progressbar=progressbar,
                                 progressbar_offset=progressbar_offset,
                                 **info_kwargs)
@@ -332,7 +336,7 @@ class hue:
         :param paths: iterable of path string, optional, will download file if passed
                       when save file in .csv, the method is designed to download large table in low memory
         :param n_jobs: maximum concurrent download tasks
-                       default to 5
+                       default to 10
         :param use_hue: whether to fetch data from hue
         :param progressbar: whether to show a progressbar
         :param progressbar_offset: position of tqdm progressbar
@@ -353,6 +357,11 @@ class hue:
                   column_names if column_names and any(column_names) else [None] * len(tables),
                   decrypt_columns if decrypt_columns and any(decrypt_columns) else [None] * len(tables),
                   paths if paths and any(paths) else [None] * len(tables)]
+
+        if use_hue and n_jobs > 10 \
+                and ("size" not in info_kwargs
+                     or ("size" in info_kwargs and info_kwargs["size"] <= 10)):
+            info_kwargs["size"] = n_jobs
 
         d_future = {}
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:

@@ -9,14 +9,15 @@ from .metrics import bin_test
 
 def binary_classification_report(y_true,
                                  y_score,
-                                 x,
                                  threshold,
+                                 x=None,
                                  bins=10,
                                  sample_weight=None,
                                  label=None,
                                  cut_method="quantile",
                                  precision=5
                                  ):
+    # TODO: variable PSI to be added to report
     type_y_true, type_y_pred = type_of_target(y_true), type_of_target(y_score)
     if type_y_true != 'binary' or type_y_pred != 'continuous':
         raise ValueError("y_true must be binary labels and y_pred must be continuous values (0-1)")
@@ -29,14 +30,18 @@ def binary_classification_report(y_true,
     label = label if label is not None else 1
 
     y_pred = y_score > threshold
+
     (pos_p, neg_p), (pos_r, neg_r), (pos_f1, neg_f1), (pos_s, neg_s) = \
         precision_recall_fscore_support(y_true=y_true, y_pred=y_pred,
                                         pos_label=label, sample_weight=sample_weight)
     balanced_acc = balanced_accuracy_score(y_true=y_true, y_pred=y_pred,
                                            sample_weight=sample_weight)
-    binned_stat = bin_test(y_true=y_true, y_pred=y_pred,
-                           x=x, bins=bins,
-                           cut_method=cut_method, precision=precision)
+    if x is None:
+        binned_stat = None
+    else:
+        binned_stat = bin_test(y_true=y_true, y_pred=y_pred,
+                               x=x, bins=bins,
+                               cut_method=cut_method, precision=precision)
     return {
         "type": "binary",
         "roc": {

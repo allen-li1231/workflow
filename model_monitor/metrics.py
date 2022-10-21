@@ -14,6 +14,13 @@ from sklearn.metrics import (confusion_matrix,
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
+def PSI(y_true, y_pred):
+    quotient = y_pred / y_true
+    psi = (y_pred - y_true) \
+          * np.log(quotient, where=quotient != 0)
+    return psi
+
+
 def _cut_bin(x,
              bins=10,
              cut_method="quantile",
@@ -116,8 +123,7 @@ def bin_test(y_true, y_pred, x,
         ks = (bad_rate.cumsum() - good_rate.cumsum()).abs()
 
         expect_rate = bin_y_pred / total_y_pred
-        psi = (bad_rate - expect_rate) \
-              * np.log(bad_rate / expect_rate, where=bad_rate / expect_rate != 0)
+        psi = PSI(expect_rate, bad_rate)
         return {
             "true_positive": bin_y_true,
             "pred_positive": bin_y_pred,
