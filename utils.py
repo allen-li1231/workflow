@@ -155,7 +155,8 @@ def append_df_to_excel(filename, df: pd.DataFrame,
                             engine='openpyxl',
                             mode='a',
                             date_format=date_format,
-                            datetime_format=datetime_format)
+                            datetime_format=datetime_format,
+                            if_sheet_exists="overlay")
 
     # try to open an existing workbook
     writer.book = load_workbook(filename)
