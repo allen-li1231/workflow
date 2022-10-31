@@ -279,7 +279,7 @@ class hue:
         try:
             self.run_sqls(lst_create_tmp_table, progressbar=False)
             self.hue_sys.set_backtick(as_regex=True)
-            self.hue_sys.set_hive("tez.grouping.split-count", str(len(lst_tmp_tables) // 2 + 1))
+            self.hue_sys.set_hive("tez.grouping.split-count", str(len(lst_tmp_tables) * 3 + 1))
             self.run_sql(str_insert_tmp_table_query,
                          progressbar=progressbar,
                          progressbar_offset=progressbar_offset,

@@ -253,7 +253,7 @@ class HueDownload(requests.Session):
             download_info = self.get_info_by_id(download_id, info_type="download", **info_kwargs)
             if download_info["status"] == 0:
                 # status: submit
-                self.log.info(f"\rprepare {table} elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
+                self.log.info(f"prepare {table} elapsed: {time.perf_counter() - start_time:.2f}/{timeout} secs")
                 continue
             if self.verbose:
                 print()
