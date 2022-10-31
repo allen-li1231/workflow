@@ -34,7 +34,9 @@ HIVE_PERFORMANCE_SETTINGS = {
     # vectorization and parallelism
     "hive.vectorized.execution.reduce.enabled": "true",
     "hive.vectorized.input.format.excludes": "",
+    "hive.exec.parallel": "true",
     "hive.exec.parallel.thread": "true",
+    "hive.exec.parallel.thread.number": "16",
     "hive.exec.dynamic.partition.mode": "nonstrict",
 
     # enable output compression to save network IO

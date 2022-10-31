@@ -372,7 +372,7 @@ class HueDownload(requests.Session):
             buffer.name = "pandas_dataframe"
             data.to_csv(buffer, index=False, encoding="utf-8")
             columns, nrows = columns or data.columns, nrows or data.shape[0]
-        elif isinstance(data, str) and re.findall('\.csv$|\.xlsx?$', data):
+        elif isinstance(data, str) and re.findall('\.xlsx$|\.xls$|\.xlsm$|\.xltx$|\.xltm$', data):
             # instead of read all data in memory using pd.read_...
             # read only necessary column info and row count
             wb = xl.load_workbook(data, read_only=True)
@@ -388,6 +388,10 @@ class HueDownload(requests.Session):
 
             wb.close()
             buffer = open(data, "rb")
+        elif isinstance(data, str) and re.findall('\.csv$', data):
+            data = pd.read_csv(data)
+            buffer = open(data, "rb")
+            columns, nrows = columns or data.columns, nrows or data.shape[0]
         else:
             raise RuntimeError('data format is not supported yet,'
                                ' please upload DataFrame, csv or xlsx with english title')
@@ -476,7 +480,7 @@ class HueDownload(requests.Session):
                 for chunk in buffer.iter_content(chunk_size=8192):
                     f.write(chunk)
 
-        self.log.info(f"\rdownload finished in {time.perf_counter() - start_time:.3f} secs")
+        self.log.info(f"download finished in {time.perf_counter() - start_time:.3f} secs")
 
     @ensure_login
     @retry(__name__)

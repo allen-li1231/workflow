@@ -203,6 +203,7 @@ class hue:
                  n_jobs: int = 10,
                  progressbar: bool = True,
                  progressbar_offset: int = 0,
+                 print_log=False,
                  **info_kwargs
                  ):
         """
@@ -222,6 +223,7 @@ class hue:
                        default to 10
         :param progressbar: whether to show a progressbar
         :param progressbar_offset: position of tqdm progressbar
+        :param print_log: whether to print cloud log to console
         :param info_kwargs: to modify default get_info_by_id parameters, add argument pairs here
                             (useful when downloadables cannot be found in just one page)
 
@@ -277,7 +279,11 @@ class hue:
         try:
             self.run_sqls(lst_create_tmp_table, progressbar=False)
             self.hue_sys.set_backtick(as_regex=True)
-            self.run_sql(str_insert_tmp_table_query, progressbar=progressbar, progressbar_offset=progressbar_offset)
+            self.hue_sys.set_hive("tez.grouping.split-count", str(len(lst_tmp_tables) // 2 + 1))
+            self.run_sql(str_insert_tmp_table_query,
+                         progressbar=progressbar,
+                         progressbar_offset=progressbar_offset,
+                         print_log=print_log)
 
             self.log.info("downloading chunks")
             lst_paths = [f"{path}.wfdl{i}" for i in range(len(lst_tmp_tables))]
@@ -294,6 +300,7 @@ class hue:
             self.run_sqls(lst_drop_tmp_table, progressbar=False)
             if not b_backtick_as_regex:
                 self.hue_sys.set_backtick(as_regex=False)
+                self.hue_sys.unset_hive("tez.grouping.split-count")
             raise e
 
         self.log.info("merging chunks")

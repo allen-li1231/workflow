@@ -559,6 +559,13 @@ class Notebook(requests.Session):
         self.hive_settings[key] = val
         self._set_hive(self.hive_settings)
 
+    def unset_hive(self, key):
+        if key not in self.hive_settings:
+            self.log.warning(f"skipping unset_hive because '{key}' not manually set in hive settings")
+        else:
+            del self.hive_settings[key]
+            self._set_hive(self.hive_settings)
+
     def recreate_session(self, hive_settings=None):
         if not hasattr(self, "session"):
             self._create_session()
@@ -857,12 +864,15 @@ class NotebookResult(object):
         if not self.is_ready():
             self.log.warning(f"result {self.snippet['status']}")
 
+        if total is None:
+            total, size = self.fetch_result_size()
+
         if progressbar:
             setup_progressbar = PROGRESSBAR.copy()
             setup_progressbar["desc"] = setup_progressbar["desc"].format(
                 name=self.name,
                 result='fetchall')
-            if total is None:
+            if not isinstance(total, int):
                 setup_progressbar["bar_format"] = '{l_bar}{n_fmt}{unit}, {rate_fmt}{postfix} |{elapsed}'
             else:
                 setup_progressbar["bar_format"] = '{l_bar}{bar:25}|[{elapsed}<{remaining}]'
@@ -874,8 +884,9 @@ class NotebookResult(object):
         res = self._fetch_result(start_over=True)
         res = res.json()["result"]
 
-        lst_data = [[normalize("NFKC", unescape(s))
-                     if isinstance(s, str) else s
+        lst_data = [[s if not isinstance(s, str)
+                     else '' if s == "NULL"
+                     else normalize("NFKC", unescape(s))
                      for s in row]
                     for row in res["data"]]
 
@@ -893,8 +904,9 @@ class NotebookResult(object):
                 gc.collect()
                 res = res.json()["result"]
             finally:
-                lst_data.extend([[normalize("NFKC", unescape(s))
-                                  if isinstance(s, str) else s
+                lst_data.extend([[s if not isinstance(s, str)
+                                  else '' if s == "NULL"
+                                  else normalize("NFKC", unescape(s))
                                   for s in row]
                                  for row in res["data"]])
                 if progressbar:
@@ -904,6 +916,46 @@ class NotebookResult(object):
             pbar.close()
         self.data = {"data": lst_data, "columns": lst_metadata}
         return self.data
+
+    @retry(__name__)
+    def _fetch_result_size(self):
+        url = self.base_url + "/notebook/api/fetch_result_size"
+        payload = {
+            "notebook": json.dumps({
+                "id": None if "id" not in self.notebook else self.notebook["id"],
+                "uuid": self.notebook["uuid"],
+                "parentSavedQueryUuid": None,
+                "isSaved": self.notebook["isSaved"],
+                "sessions": self.notebook["sessions"],
+                "type": self.notebook["type"],
+                "name": self.notebook["name"],
+            }),
+            "snippet": json.dumps(self.snippet)
+        }
+        res = self._notebook.post(url, data=payload)
+        return res
+
+    def fetch_result_size(self):
+        # this might be inaccurate when sql contains `limit`
+        res = self._fetch_result_size()
+        res = res.json()
+        if res["status"] != 0:
+            if "result" not in res:
+                self.log.warning(res)
+                return None, None
+        
+            res = res["result"]
+            if "message" in res:
+                self.log.warning(res["message"])
+            else:
+                self.log.warning(res)
+            return None, None
+
+        res = res["result"]
+        if "message" in res and isinstance(res["message"], str):
+            self.log.warning(res["message"])
+
+        return res["rows"], res["size"]
 
     def fetch_cloud_logs(self):
         self.log.debug("fetching cloud logs")
@@ -1008,6 +1060,9 @@ class NotebookResult(object):
         if not os.path.exists(abs_dir):
             os.makedirs(abs_dir)
 
+        if total is None:
+            total, size = self.fetch_result_size()
+
         abs_path = os.path.join(abs_dir, base_name)
 
         self.log.info(f"downloading to {abs_path}")
@@ -1016,7 +1071,7 @@ class NotebookResult(object):
             setup_progressbar["desc"] = setup_progressbar["desc"].format(
                 name=self.name,
                 result='fetchall')
-            if total is None:
+            if not isinstance(total, int):
                 setup_progressbar["bar_format"] = '{l_bar}{n_fmt}{unit}, {rate_fmt}{postfix} |{elapsed}'
             else:
                 setup_progressbar["bar_format"] = '{l_bar}{bar:25}|[{elapsed}<{remaining}]'
@@ -1029,8 +1084,9 @@ class NotebookResult(object):
 
             res = self._fetch_result(start_over=True)
             res = res.json()["result"]
-            lst_data = [[normalize("NFKC", unescape(s))
-                         if isinstance(s, str) else s
+            lst_data = [[s if not isinstance(s, str)
+                         else '' if s == "NULL"
+                         else normalize("NFKC", unescape(s))
                          for s in row]
                         for row in res["data"]]
 
@@ -1046,8 +1102,9 @@ class NotebookResult(object):
             while res["has_more"]:
                 res = self._fetch_result(start_over=False)
                 res = res.json()["result"]
-                lst_data = [[normalize("NFKC", unescape(s))
-                             if isinstance(s, str) else s
+                lst_data = [[s if not isinstance(s, str)
+                             else '' if s == "NULL"
+                             else normalize("NFKC", unescape(s))
                              for s in row]
                             for row in res["data"]]
 

@@ -63,7 +63,7 @@ class Jupyter(JupyterBase):
 
         if progressbar:
             pbar.close()
-        return buffer.status_code
+        return buffer
 
     def upload(self, file_path, dst_path, progressbar=True, progressbar_offset=0):
         """
@@ -96,10 +96,14 @@ class Jupyter(JupyterBase):
                 res = self._upload(data=f.read(),
                                    file_name=file_name,
                                    dst_path=dst_path)
-                r_json = res.json()
-                if "message" in r_json:
-                    raise RuntimeError(r_json["message"])
-                return res.status_code
+                if res.status_code >= 400:
+                    r_json = res.json()
+                    if "message" in r_json:
+                        raise RuntimeError(r_json["message"])
+                    else:
+                        raise RuntimeError(r_json)
+
+                return res
 
             if progressbar:
                 pbar = tqdm(total=file_size,
@@ -115,12 +119,19 @@ class Jupyter(JupyterBase):
                                    file_name=file_name,
                                    dst_path=dst_path,
                                    chunk=chunk)
+                if res.status_code >= 400:
+                    r_json = res.json()
+                    if "message" in r_json:
+                        raise RuntimeError(r_json["message"])
+                    else:
+                        raise RuntimeError(r_json)
+
                 if progressbar:
                     pbar.update(len(data))
 
         if progressbar:
             pbar.close()
-        return res.status_code
+        return res
 
     def new_session(self):
         return self._new_terminal().json()["name"]
@@ -130,7 +141,7 @@ class Jupyter(JupyterBase):
         if res.status_code != 204:
             self.log.warning(res.text)
 
-        return res.status_code
+        return res
 
     def get_sessions(self):
         res = self._get_sessions()
