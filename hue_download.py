@@ -389,8 +389,8 @@ class HueDownload(requests.Session):
             wb.close()
             buffer = open(data, "rb")
         elif isinstance(data, str) and re.findall('\.csv$', data):
-            data = pd.read_csv(data)
             buffer = open(data, "rb")
+            data = pd.read_csv(data)
             columns, nrows = columns or data.columns, nrows or data.shape[0]
         else:
             raise RuntimeError('data format is not supported yet,'

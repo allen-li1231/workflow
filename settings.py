@@ -19,15 +19,15 @@ HIVE_PERFORMANCE_SETTINGS = {
     # "mapreduce.reduce.java.opts": f"-Djava.net.preferIPv4Stack=true -Xmx{1700 * 2}m",
     # "hive.exec.reducers.bytes.per.reducer": f"{134217728 // 2}"   # decrease by half would increase parallelism
 
-    # when nodes read data from HDFS, combine small files < 32 MB to decrease number of mappers
+    # when nodes read data from HDFS, combine small files < 16 MB to decrease number of mappers
     # "hive.tez.input.format": "org.apache.hadoop.hive.ql.io.HiveInputFormat",
-    "tez.grouping.min-size": "33554432",
+    "tez.grouping.min-size": "16777216",
     "tez.grouping.max-size": "536870912",
     "tez.grouping.split-waves": "1.8",
     # enable block read from HDFS, which decreases number of mappers while using mr engine
-    "mapred.min.split.size": "33554432",
+    "mapred.min.split.size": "16777216",
     "mapred.max.split.size": "536870912",
-    "mapreduce.input.fileinputformat.split.minsize": "33554432",
+    "mapreduce.input.fileinputformat.split.minsize": "16777216",
     # max(mapred.min.split.size, min(mapred.max.split.size, dfs.block.size))
     "mapreduce.input.fileinputformat.split.maxsize": "536870912",
 

@@ -109,7 +109,8 @@ def bin_test(y_true, y_pred, x,
              closed="right",
              precision=3,
              fillna=np.nan,
-             n_jobs=5):
+             n_jobs=3):
+
     # calculate bad label count and cumsum it
     def _bin_helper(bin_):
         bin_y_true = y_true.groupby(bin_).sum()
@@ -133,6 +134,12 @@ def bin_test(y_true, y_pred, x,
             "psi": psi
         }
 
+    if not isinstance(y_true, pd.Series):
+        y_true = pd.Series(y_true, copy=True, name="y_true")
+
+    if not isinstance(y_pred, pd.Series):
+        y_pred = pd.Series(y_pred, copy=True, name="y_pred")
+    
     bins = _cut_bin(x,
                     bins=bins,
                     cut_method=cut_method,

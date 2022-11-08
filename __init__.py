@@ -279,7 +279,7 @@ class hue:
         try:
             self.run_sqls(lst_create_tmp_table, progressbar=False)
             self.hue_sys.set_backtick(as_regex=True)
-            self.hue_sys.set_hive("tez.grouping.split-count", str(len(lst_tmp_tables) * 3 + 1))
+            self.hue_sys.set_hive("tez.grouping.split-count", str(len(lst_tmp_tables) * 5 + 1))
             self.run_sql(str_insert_tmp_table_query,
                          progressbar=progressbar,
                          progressbar_offset=progressbar_offset,
@@ -298,10 +298,14 @@ class hue:
                                 **info_kwargs)
         except Exception as e:
             self.run_sqls(lst_drop_tmp_table, progressbar=False)
+            self.hue_sys.unset_hive("tez.grouping.split-count")
             if not b_backtick_as_regex:
                 self.hue_sys.set_backtick(as_regex=False)
-                self.hue_sys.unset_hive("tez.grouping.split-count")
             raise e
+
+        self.hue_sys.unset_hive("tez.grouping.split-count")
+        if not b_backtick_as_regex:
+            self.hue_sys.set_backtick(as_regex=False)
 
         self.log.info("merging chunks")
         if os.path.isfile(path):
@@ -314,8 +318,6 @@ class hue:
 
         self.log.info("cleaning up caches")
         self.run_sqls(lst_drop_tmp_table, progressbar=False)
-        if not b_backtick_as_regex:
-            self.hue_sys.set_backtick(as_regex=False)
 
     def batch_download(self,
                        tables: list,
