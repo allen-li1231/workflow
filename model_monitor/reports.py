@@ -43,20 +43,22 @@ def binary_classification_report(y_true,
                                x=x, bins=bins,
                                cut_method=cut_method, precision=precision)
     return {
-        "type": "binary",
-        "roc": {
-            "fpr": fpr.round(precision).tolist(),
-            "tpr": tpr.round(precision).tolist(),
-            "threshold": ths.round(precision).tolist()
+        "result_type": "binary",
+        "result_stats":{
+            "roc": {
+                "fpr": fpr.round(precision).tolist(),
+                "tpr": tpr.round(precision).tolist(),
+                "threshold": ths.round(precision).tolist()
+            },
+            "auc": np.round(auc, precision),
+            "ks": np.round(ks, precision),
+            "balanced_acc": np.round(balanced_acc, precision), 
+            "precision": [np.round(pos_p, precision), np.round(neg_p, precision)],
+            "recall": [np.round(pos_r, precision), np.round(neg_r, precision)],
+            "f1": [np.round(pos_f1, precision), np.round(neg_f1, precision)],
+            "support": [np.round(pos_s, precision), np.round(neg_s, precision)],
         },
-        "auc": np.round(auc, precision),
-        "ks": np.round(ks, precision),
-        "balanced_acc": np.round(balanced_acc, precision),
-        "precision": [np.round(pos_p, precision), np.round(neg_p, precision)],
-        "recall": [np.round(pos_r, precision), np.round(neg_r, precision)],
-        "f1": [np.round(pos_f1, precision), np.round(neg_f1, precision)],
-        "support": [np.round(pos_s, precision), np.round(neg_s, precision)],
-        "binned_stat": binned_stat
+        "feature_stats": binned_stat
     }
 
 
