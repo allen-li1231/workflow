@@ -235,9 +235,12 @@ class Notebook(requests.Session):
         self._password = password
 
         super(Notebook, self).__init__()
+        self.headers["Accept"] = "*/*"
         self.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) " \
                                      "AppleWebKit/537.36 (KHTML, like Gecko) " \
                                      "Chrome/76.0.3809.100 Safari/537.36"
+        self.headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
+
         if self.username is not None \
                 and password is not None:
             self.login(self.username, password)
@@ -263,11 +266,14 @@ class Notebook(requests.Session):
                 or f"var LOGGED_USERNAME = '';" in res.text:
             self.log.error('login failed for [%s] at %s'
                            % (self.username, self.base_url))
-            self._password = None
+            raise ValueError('login failed for [%s] at %s'
+                             % (self.username, self.base_url))
         else:
             self.log.info('login succeeful [%s] at %s'
                           % (self.username, self.base_url))
 
+            self.headers["X-CSRFToken"] = self.cookies["csrftoken"]
+            self.headers["X-Requested-With"] = "XMLHttpRequest"
             self.is_logged_in = True
             self.headers["X-CSRFToken"] = self.cookies['csrftoken']
             self.headers["Content-Type"] = "application/x-www-form-urlencoded; " \
@@ -281,17 +287,20 @@ class Notebook(requests.Session):
     @retry(__name__)
     def _login(self):
         login_url = self.base_url + '/accounts/login/'
+        # get csrftoken and sessionid from login page
         self.get(login_url)
+        self.headers["Origin"] = self.base_url
         self.headers["Referer"] = login_url
-        form_data = dict(username=self.username,
-                         password=self._password,
-                         csrfmiddlewaretoken=self.cookies['csrftoken'],
-                         next='/')
+        self.headers["X-CSRFToken"] = self.cookies["csrftoken"]
+        data = {
+            "username": self.username,
+            "password": self._password,
+            "csrfmiddlewaretoken": self.cookies['csrftoken']
+        }
 
-        res = self.post(login_url,
-                        data=form_data,
-                        cookies={},
-                        headers=self.headers)
+        # if successfully logged in, hue backend will redirect webpage with http 302
+        # but in our case we don't need it to spend time redirecting
+        res = self.post(login_url, data=data, allow_redirects=False)
         return res
 
     def _create_notebook(self, name="", description=""):
@@ -305,13 +314,8 @@ class Notebook(requests.Session):
     def __create_notebook(self):
         self.log.debug("creating notebook")
         url = self.base_url + "/notebook/api/create_notebook"
-        self.headers["Host"] = "10.19.185.29:8889"
-        self.headers["Referer"] = "http://10.19.185.29:8889/hue/editor/?type=hive"
-
         res = self.post(
             url,
-            headers=self.headers,
-            cookies=self.cookies,
             data={
                 "type": "hive",
                 "directory_uuid": ""
@@ -326,8 +330,6 @@ class Notebook(requests.Session):
         # instead, it will return existing busy/idle session
         self.log.debug("creating session")
         url = self.base_url + "/notebook/api/create_session"
-        self.headers["Host"] = "10.19.185.29:8889"
-        self.headers["Referer"] = "http://10.19.185.29:8889/hue/editor/?type=hive"
 
         payload = {
             "notebook": json.dumps({
@@ -339,19 +341,14 @@ class Notebook(requests.Session):
                 "type": self.notebook["type"],
                 "name": self.notebook["name"],
                 "description": self.notebook["description"],
-                }),
+            }),
             "session": json.dumps({"type": "hive"}),
-            }
+        }
 
-        r = self.post(
-            url,
-            headers=self.headers,
-            cookies=self.cookies,
-            data=payload
-        )
-        r_json = r.json()
+        res = self.post(url, data=payload)
+        r_json = res.json()
         self.session = r_json["session"]
-        return r
+        return res
 
     def _set_hive(self, hive_settings):
         self.log.debug("setting up hive job")
@@ -443,7 +440,7 @@ class Notebook(requests.Session):
                 progressbar_offset: int = 0,
                 sync=True):
         try:
-            if hasattr(self, "snippet"):
+            if hasattr(self, "snippet") and self.is_logged_in:
                 self._close_statement()
 
             self._prepare_snippet(sql, database)
@@ -458,8 +455,8 @@ class Notebook(requests.Session):
                     self.log.error(r_json.text)
                     raise RuntimeError(r_json.text)
 
-            self.notebook["id"] = r_json["history_id"]
-            self.notebook["uuid"] = r_json["history_uuid"]
+            self.notebook["id"] = r_json.get('history_id', self.notebook.get("id", None))
+            self.notebook["uuid"] = r_json.get('history_uuid', self.notebook.get("uuid", None))
             self.notebook["isHistory"] = True
             self.notebook["isBatchable"] = True
 
@@ -474,7 +471,9 @@ class Notebook(requests.Session):
 
             return self._result
         except KeyboardInterrupt:
-            self.cancel_statement()
+            if self.is_logged_in:
+                self.cancel_statement()
+
             self.recreate_session()
             if self._result._progressbar:
                 self._result._progressbar.close()
@@ -614,8 +613,8 @@ class Notebook(requests.Session):
                         )
         return res
 
-    @retry(__name__)
     @ensure_login
+    @retry(__name__)
     def close_notebook(self):
         if not hasattr(self, "notebook"):
             self.log.warning("notebook not created yet")
@@ -637,7 +636,7 @@ class Notebook(requests.Session):
         self.log.info(f"logging out")
 
         url = self.base_url + "/accounts/logout/"
-        res = self.get(url)
+        res = self.get(url, allow_redirects=False)
         return res
 
     def new_notebook(self,
@@ -691,11 +690,12 @@ class Notebook(requests.Session):
             self._prepare_notebook(self.name, self.description)
 
     def close(self):
-        if hasattr(self, "snippet"):
-            self._close_statement()
+        if self.is_logged_in:
+            if hasattr(self, "snippet"):
+                self._close_statement()
 
-        if hasattr(self, "notebook"):
-            self.close_notebook()
+            if hasattr(self, "notebook"):
+                self.close_notebook()
 
         super(Notebook, self).close()
 

@@ -13,10 +13,11 @@ def ensure_login(func):
             self.login()
 
         res = func(self, *args, **kwargs)
+        if "csrftoken" in self.cookies:
+            self.headers["X-CSRFToken"] = self.cookies["csrftoken"]
+
         if isinstance(res, requests.models.Response) \
-                and (("X-Hue-Middleware-Response" in res.headers
-                      and res.headers["X-Hue-Middleware-Response"] == "LOGIN_REQUIRED")
-                     or (res._content_consumed and "Unauthorized" in res.text)):
+                and res._content_consumed and "Unauthorized" in res.text:
             self.login()
             return func(self, *args, **kwargs)
         return res
@@ -51,7 +52,7 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
                     continue
 
                 if not isinstance(res, requests.models.Response) \
-                        or res.status_code in (200, 201, 204):
+                        or res.status_code in (200, 201, 204, 301, 302):
                     return res
 
                 if isinstance(res, requests.models.Response) \

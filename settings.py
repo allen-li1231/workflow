@@ -13,11 +13,11 @@ TEZ_SESSION_TIMEOUT_SECS = 300
 
 HIVE_PERFORMANCE_SETTINGS = {
     # resource settings:
-    # "mapreduce.map.memory.mb": f"{2048 * 2}",
-    # "mapreduce.reduce.memory.mb": f"{2048 * 2}",
-    # "mapreduce.map.java.opts": f"-Djava.net.preferIPv4Stack=true -Xmx{1700 * 2}m",
-    # "mapreduce.reduce.java.opts": f"-Djava.net.preferIPv4Stack=true -Xmx{1700 * 2}m",
-    # "hive.exec.reducers.bytes.per.reducer": f"{134217728 // 2}"   # decrease by half would increase parallelism
+    # "mapreduce.map.memory.mb": f"{4096 * 2}",
+    # "mapreduce.reduce.memory.mb": f"{8192 * 2}",
+    # "mapreduce.map.java.opts": f"-Djava.net.preferIPv4Stack=true -Xms3276m -Xmx3276m -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:+UseCompressedOops -Xmx3435134976",
+    # "mapreduce.reduce.java.opts": f"-Djava.net.preferIPv4Stack=true  -Xms6554m -Xmx6554m -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:+UseCompressedOops -Xmx6872367104",
+    # "hive.exec.reducers.bytes.per.reducer": f"{67108864 // 2}"   # decrease by half would increase parallelism
 
     # when nodes read data from HDFS, combine small files < 16 MB to decrease number of mappers
     # "hive.tez.input.format": "org.apache.hadoop.hive.ql.io.HiveInputFormat",
@@ -26,16 +26,16 @@ HIVE_PERFORMANCE_SETTINGS = {
     "tez.grouping.split-waves": "1.8",
     # enable block read from HDFS, which decreases number of mappers while using mr engine
     "mapred.min.split.size": "16777216",
-    "mapred.max.split.size": "536870912",
+    "mapred.max.split.size": "256000000",
     "mapreduce.input.fileinputformat.split.minsize": "16777216",
     # max(mapred.min.split.size, min(mapred.max.split.size, dfs.block.size))
-    "mapreduce.input.fileinputformat.split.maxsize": "536870912",
+    "mapreduce.input.fileinputformat.split.maxsize": "256000000",
 
     # vectorization and parallelism
+    "hive.vectorized.execution.enabled": "true",
     "hive.vectorized.execution.reduce.enabled": "true",
     "hive.vectorized.input.format.excludes": "",
     "hive.exec.parallel": "true",
-    "hive.exec.parallel.thread": "true",
     "hive.exec.parallel.thread.number": "16",
     "hive.exec.dynamic.partition.mode": "nonstrict",
 
@@ -56,6 +56,14 @@ HIVE_PERFORMANCE_SETTINGS = {
     # "hive.auto.convert.sortmerge.join.bigtable.selection.policy": "org.apache.hadoop.hive.ql.optimizer.TableSizeBasedBigTableSelectorForAutoSMJ",
     # "hive.auto.convert.sortmerge.join.to.mapjoin": "true",
 
+    # allow subdirectory in mapreduce
+    "hive.mapred.supports.subdirectories": "true",
+    "mapred.input.dir.recursive": "true",
+    "spark.hadoop.hive.input.dir.recursive": "true",
+    "spark.hadoop.hive.mapred.supports.subdirectories": "true",
+    "spark.hadoop.hive.supports.subdirectories": "true",
+    "park.hadoop.hive.mapred.input.dir.recursive": "true",
+
     "hive.optimize.skewjoin": "true",
     "hive.optimize.skewjoin.compiletime": "true",
     "hive.optimize.union.remove": "true",
@@ -67,7 +75,8 @@ HIVE_PERFORMANCE_SETTINGS = {
     # refer to: "Hive Understanding concurrent sessions queue allocation"
     "hive.execution.engine": "tez",
     "hive.tez.auto.reducer.parallelism": "true",
-    "tez.queue.name": "root.fengkong",
+    # https://blog.cloudera.com/optimizing-hive-on-tez-performance/
+    "hive.prewarm.enabled": "true",
     # refer to: "Configure Tez Container Reuse"
     "tez.session.am.dag.submit.timeout.secs": f"{TEZ_SESSION_TIMEOUT_SECS}",
     "tez.am.container.reuse.enabled": "true",
