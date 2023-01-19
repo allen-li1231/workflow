@@ -14,7 +14,7 @@ from unicodedata import normalize
 import requests
 
 from . import logger
-from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR, YARN_BASE_URL
+from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR
 from .decorators import retry, ensure_login
 
 __all__ = ["Notebook", "Beeswax"]
@@ -262,8 +262,9 @@ class Notebook(requests.Session):
 
         self.log.debug(f"logging in for user: [{self.username}]")
         res = self._login()
-        if res.status_code != 200 \
-                or f"var LOGGED_USERNAME = '';" in res.text:
+        if res.status_code != 302 \
+                or "errorList" in res.text:
+            self._password = None
             self.log.error('login failed for [%s] at %s'
                            % (self.username, self.base_url))
             raise ValueError('login failed for [%s] at %s'
@@ -275,11 +276,6 @@ class Notebook(requests.Session):
             self.headers["X-CSRFToken"] = self.cookies["csrftoken"]
             self.headers["X-Requested-With"] = "XMLHttpRequest"
             self.is_logged_in = True
-            self.headers["X-CSRFToken"] = self.cookies['csrftoken']
-            self.headers["Content-Type"] = "application/x-www-form-urlencoded; " \
-                                           "charset=UTF-8"
-            self.headers["X-Requested-With"] = "XMLHttpRequest"
-
             self._prepare_notebook(self.name, self.description, self.hive_settings)
 
         return self
@@ -681,7 +677,7 @@ class Notebook(requests.Session):
                         data={
                             "notebook": json.dumps(self.notebook),
                             "doc_type": "hive"
-                            })
+                        })
         return res
 
     def clear_history(self, simple=False):
@@ -770,12 +766,15 @@ class NotebookResult(object):
         if len(self._app_id) > 0:
             r_json = self._get_app_info(self._app_id).json()
             if 'message' in r_json:
-                self.log.warning(f"yarn cannot find {self._app_id}")
+                self.log.warning(f"cannot find {self._app_id}")
                 return self.snippet["status"]
 
-            r_json = r_json["app"]
+            r_json = r_json["job"]
             progress = r_json["progress"]
-            self._progress = progress
+            # value of progress might become "", indicating the query is available or failed
+            # at this point the progress will just keep its original value
+            # afterward let _check_status update the true status of query
+            self._progress = float(progress) if progress else self._progress
 
         # init time counter
         cur_check = time.perf_counter()
@@ -1010,8 +1009,9 @@ class NotebookResult(object):
 
     @retry(__name__)
     def _get_app_info(self, app_id):
-        url = YARN_BASE_URL + f"/ws/v1/cluster/apps/{app_id}"
-        res = self._notebook.get(url)
+        url = HUE_BASE_URL + f"/jobbrowser/jobs/{app_id}"
+        res = self._notebook.get(url,
+                                 params={"format": "json"}, )
         return res
 
     @retry(__name__)

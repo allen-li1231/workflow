@@ -312,9 +312,12 @@ class hue:
             os.remove(path)
 
         for excel in lst_paths:
-            df = pd.read_csv(excel, encoding="utf-8")
-            append_df_to_csv(path, df, encoding="utf-8", index=False)
-            os.remove(excel)
+            try:
+                df = pd.read_csv(excel, encoding="utf-8")
+                append_df_to_csv(path, df, encoding="utf-8", index=False)
+                os.remove(excel)
+            except FileNotFoundError as e:
+                self.log.error(e)
 
         self.log.info("cleaning up caches")
         self.run_sqls(lst_drop_tmp_table, progressbar=False)

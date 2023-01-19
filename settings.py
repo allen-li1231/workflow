@@ -1,7 +1,7 @@
 import sys
 import importlib.util
 
-HUE_BASE_URL = "http://10.19.185.29:8889"
+HUE_BASE_URL = "http://10.19.166.2:8000"
 
 HUE_DOWNLOAD_BASE_URL = "http://10.19.185.103:8000"
 
