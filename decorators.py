@@ -17,7 +17,8 @@ def ensure_login(func):
             self.headers["X-CSRFToken"] = self.cookies["csrftoken"]
 
         if isinstance(res, requests.models.Response) \
-                and res._content_consumed and "Unauthorized" in res.text:
+                and res._content_consumed \
+                and "/* login required */" in res.text:
             self.login()
             return func(self, *args, **kwargs)
         return res

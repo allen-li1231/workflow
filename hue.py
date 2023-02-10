@@ -14,7 +14,7 @@ from unicodedata import normalize
 import requests
 
 from . import logger
-from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR
+from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR, HUE_INACTIVE_TIME
 from .decorators import retry, ensure_login
 
 __all__ = ["Notebook", "Beeswax"]
@@ -230,7 +230,6 @@ class Notebook(requests.Session):
         else:
             self.base_url = base_url
 
-        self.is_logged_in = False
         self.username = username
         self._password = password
 
@@ -245,9 +244,14 @@ class Notebook(requests.Session):
                 and password is not None:
             self.login(self.username, password)
 
-    def login(self, username: str = None, password: str = None):
-        self.is_logged_in = False
+    @property
+    def is_logged_in(self):
+        if not hasattr(self, "_last_execute"):
+            return False
+        
+        return time.perf_counter() - self._last_execute < HUE_INACTIVE_TIME
 
+    def login(self, username: str = None, password: str = None):
         self.username = username or self.username
         self._password = password or self._password
         if self.username is None and self._password is None:
@@ -259,6 +263,14 @@ class Notebook(requests.Session):
         if self.username is not None and self._password is None:
             print("Please provide Hue password:", end='')
             self._password = input("")
+
+        if "X-Requested-With" in self.headers:
+            del self.headers["X-Requested-With"]
+        
+        if "csrftoken" in self.cookies:
+            del self.cookies["csrftoken"]
+            if "X-CSRFToken" in self.headers:
+                del self.headers["X-CSRFToken"]
 
         self.log.debug(f"logging in for user: [{self.username}]")
         res = self._login()
@@ -275,7 +287,8 @@ class Notebook(requests.Session):
 
             self.headers["X-CSRFToken"] = self.cookies["csrftoken"]
             self.headers["X-Requested-With"] = "XMLHttpRequest"
-            self.is_logged_in = True
+
+            self._last_execute = time.perf_counter()
             self._prepare_notebook(self.name, self.description, self.hive_settings)
 
         return self
@@ -428,6 +441,7 @@ class Notebook(requests.Session):
                 "wasBatchExecuted": False
                 }
 
+    @ensure_login
     def execute(self,
                 sql: str,
                 database: str = "default",
@@ -624,7 +638,7 @@ class Notebook(requests.Session):
         return res
 
     def logout(self):
-        self.is_logged_in = False
+        self._last_execute = 0.
         return self._logout()
 
     @retry(__name__)
@@ -649,7 +663,7 @@ class Notebook(requests.Session):
         new_nb.hive_settings = hive_settings
         new_nb.username = self.username
         new_nb._password = self._password
-        new_nb.is_logged_in = self.is_logged_in
+        new_nb._last_execute = self._last_execute
         new_nb.verbose = self.verbose if verbose is None else verbose
 
         new_nb.log = logging.getLogger(__name__ + f".Notebook[{name}]")

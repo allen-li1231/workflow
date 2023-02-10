@@ -14,7 +14,7 @@ from PIL import Image
 from requests_toolbelt import MultipartEncoder
 import logging
 
-from .settings import HUE_DOWNLOAD_BASE_URL, EXCEL_ENGINE
+from .settings import HUE_DOWNLOAD_BASE_URL, HUE_DONWLOAD_LOGIN_URL, EXCEL_ENGINE
 from .decorators import retry, ensure_login
 from . import logger
 
@@ -26,6 +26,7 @@ class HueDownload(requests.Session):
                  password: str = None,
                  verbose: bool = False):
         self.base_url = HUE_DOWNLOAD_BASE_URL
+        self.login_url = HUE_DONWLOAD_LOGIN_URL
 
         self.username = username
         self._password = password
