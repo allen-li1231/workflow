@@ -1,7 +1,7 @@
 import logging
 import os
 from threading import Thread
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 from .base import JupyterBase, Terminal
 from .. import logger

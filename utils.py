@@ -151,42 +151,61 @@ def append_df_to_excel(filename, df: pd.DataFrame,
     if 'header' in to_excel_kwargs:
         to_excel_kwargs.pop('header')
 
-    writer = pd.ExcelWriter(filename,
-                            engine='openpyxl',
-                            mode='a',
-                            date_format=date_format,
-                            datetime_format=datetime_format,
-                            if_sheet_exists="overlay")
+    if pd.__version__ >= '1.4.0':
+        book = load_workbook(filename)
+        if startrow is None and sheet_name in book.sheetnames:
+            startrow = book[sheet_name].max_row
 
-    # try to open an existing workbook
-    writer.book = load_workbook(filename)
+        with pd.ExcelWriter(
+            filename,
+            engine='openpyxl',
+            mode='a',
+            date_format=date_format,
+            datetime_format=datetime_format,
+            if_sheet_exists="replace" if truncate_sheet else "overlay"
+            ) as writer:
+            df.to_excel(writer,
+                        sheet_name=sheet_name,
+                        startrow=startrow if startrow is not None else 0,
+                        header=None,
+                        **to_excel_kwargs)
+    else:
+        writer = pd.ExcelWriter(filename,
+                                engine='openpyxl',
+                                mode='a',
+                                date_format=date_format,
+                                datetime_format=datetime_format,
+                                if_sheet_exists="overlay")
 
-    # get the last row in the existing Excel sheet
-    # if it was not specified explicitly
-    if startrow is None and sheet_name in writer.book.sheetnames:
-        startrow = writer.book[sheet_name].max_row
+        # try to open an existing workbook
+        writer.book = load_workbook(filename)
 
-    # truncate sheet
-    if truncate_sheet and sheet_name in writer.book.sheetnames:
-        # index of [sheet_name] sheet
-        idx = writer.book.sheetnames.index(sheet_name)
-        # remove [sheet_name]
-        writer.book.remove(writer.book.worksheets[idx])
-        # create an empty sheet [sheet_name] using old index
-        writer.book.create_sheet(sheet_name, idx)
+        # get the last row in the existing Excel sheet
+        # if it was not specified explicitly
+        if startrow is None and sheet_name in writer.book.sheetnames:
+            startrow = writer.book[sheet_name].max_row
 
-    # copy existing sheets
-    writer.sheets = {ws.title: ws for ws in writer.book.worksheets}
+        # truncate sheet
+        if truncate_sheet and sheet_name in writer.book.sheetnames:
+            # index of [sheet_name] sheet
+            idx = writer.book.sheetnames.index(sheet_name)
+            # remove [sheet_name]
+            writer.book.remove(writer.book.worksheets[idx])
+            # create an empty sheet [sheet_name] using old index
+            writer.book.create_sheet(sheet_name, idx)
 
-    if startrow is None:
-        startrow = 0
+        # copy existing sheets
+        writer.sheets = {ws.title: ws for ws in writer.book.worksheets}
 
-    # write out the new sheet
-    df.to_excel(writer,
-                sheet_name,
-                startrow=startrow,
-                header=None,
-                **to_excel_kwargs)
+        if startrow is None:
+            startrow = 0
 
-    # save the workbook
-    writer.save()
+        # write out the new sheet
+        df.to_excel(writer,
+                    sheet_name,
+                    startrow=startrow,
+                    header=None,
+                    **to_excel_kwargs)
+
+        # save the workbook
+        writer.save()

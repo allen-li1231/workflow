@@ -2,7 +2,7 @@ import copy
 import gc
 import csv
 import json
-from tqdm.auto import tqdm
+from tqdm import tqdm
 import logging
 import os
 import time
@@ -804,7 +804,7 @@ class NotebookResult(object):
         except RuntimeError:
             cloud_log = ''
         # call _check_status api only when the result has final status
-        if "ERROR" in cloud_log:
+        if "ERROR  :" in cloud_log:
             will_update_status = True
             self.log.error(cloud_log)
         elif "INFO  : OK" in cloud_log:

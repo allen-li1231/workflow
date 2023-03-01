@@ -3,15 +3,16 @@ import importlib.util
 
 HUE_BASE_URL = "http://10.19.166.2:8000"
 
-HUE_DOWNLOAD_BASE_URL = "http://10.19.185.103:8000"
-
-YARN_BASE_URL = "http://10.19.185.102:8088"
+HUE_DOWNLOAD_BASE_URL = "http://10.19.185.2:8000"
 
 MAX_LEN_PRINT_SQL = 100
+
+HUE_INACTIVE_TIME = 1800
 
 TEZ_SESSION_TIMEOUT_SECS = 300
 
 HIVE_PERFORMANCE_SETTINGS = {
+    "hive.query.name": "root.fengkong",
     # resource settings:
     # "mapreduce.map.memory.mb": f"{4096 * 2}",
     # "mapreduce.reduce.memory.mb": f"{8192 * 2}",
@@ -20,9 +21,9 @@ HIVE_PERFORMANCE_SETTINGS = {
     # "hive.exec.reducers.bytes.per.reducer": f"{67108864 // 2}"   # decrease by half would increase parallelism
 
     # when nodes read data from HDFS, combine small files < 16 MB to decrease number of mappers
-    # "hive.tez.input.format": "org.apache.hadoop.hive.ql.io.HiveInputFormat",
+    "hive.tez.input.format": "org.apache.hadoop.hive.ql.io.HiveInputFormat",
     "tez.grouping.min-size": "16777216",
-    "tez.grouping.max-size": "536870912",
+    "tez.grouping.max-size": "256000000",
     "tez.grouping.split-waves": "1.8",
     # enable block read from HDFS, which decreases number of mappers while using mr engine
     "mapred.min.split.size": "16777216",
@@ -36,7 +37,7 @@ HIVE_PERFORMANCE_SETTINGS = {
     "hive.vectorized.execution.reduce.enabled": "true",
     "hive.vectorized.input.format.excludes": "",
     "hive.exec.parallel": "true",
-    "hive.exec.parallel.thread.number": "16",
+    "hive.exec.parallel.thread.number": "4",
     "hive.exec.dynamic.partition.mode": "nonstrict",
 
     # enable output compression to save network IO
@@ -48,21 +49,24 @@ HIVE_PERFORMANCE_SETTINGS = {
     # enable inserting data into a bucketed or sorted table
     "hive.enforce.bucketing": "true",
     "hive.enforce.sorting": "true",
-    "hive.optimize.bucketmapjoin": "true",
+    # enable SMB map join
+    # BUG: on cluster 166, this causes "ReduceWork" cannot be casted to "MapWork" error using Hive on Spark
+    #"hive.optimize.bucketmapjoin": "true",
     "hive.optimize.bucketmapjoin.sortedmerge": "true",
-    # BUG: enabling all these ones could cause Vertex Error:
-    # "hive.auto.convert.sortmerge.join": "true",
-    # "hive.auto.convert.sortmerge.join.noconditionaltask": "true",
-    # "hive.auto.convert.sortmerge.join.bigtable.selection.policy": "org.apache.hadoop.hive.ql.optimizer.TableSizeBasedBigTableSelectorForAutoSMJ",
-    # "hive.auto.convert.sortmerge.join.to.mapjoin": "true",
+    # BUG: on cluster 185, enabling all these ones could cause Vertex Error:
+    "hive.auto.convert.sortmerge.join": "true",
+    "hive.auto.convert.sortmerge.join.noconditionaltask": "true",
+    "hive.auto.convert.sortmerge.join.bigtable.selection.policy": "org.apache.hadoop.hive.ql.optimizer.TableSizeBasedBigTableSelectorForAutoSMJ",
+    "hive.auto.convert.sortmerge.join.to.mapjoin": "true",
 
     # allow subdirectory in mapreduce
     "hive.mapred.supports.subdirectories": "true",
+    "mapreduce.input.fileinputformat.input.dir.recursive": "true",
     "mapred.input.dir.recursive": "true",
     "spark.hadoop.hive.input.dir.recursive": "true",
     "spark.hadoop.hive.mapred.supports.subdirectories": "true",
     "spark.hadoop.hive.supports.subdirectories": "true",
-    "park.hadoop.hive.mapred.input.dir.recursive": "true",
+    "spark.hadoop.hive.mapred.input.dir.recursive": "true",
 
     "hive.optimize.skewjoin": "true",
     "hive.optimize.skewjoin.compiletime": "true",
@@ -73,7 +77,7 @@ HIVE_PERFORMANCE_SETTINGS = {
     "hive.compute.query.using.stats": "true",
 
     # refer to: "Hive Understanding concurrent sessions queue allocation"
-    "hive.execution.engine": "tez",
+    "hive.execution.engine": "spark",
     "hive.tez.auto.reducer.parallelism": "true",
     # https://blog.cloudera.com/optimizing-hive-on-tez-performance/
     "hive.prewarm.enabled": "true",
@@ -82,9 +86,13 @@ HIVE_PERFORMANCE_SETTINGS = {
     "tez.am.container.reuse.enabled": "true",
     "tez.am.container.session.delay-allocation-millis": f"{TEZ_SESSION_TIMEOUT_SECS * 1000}",
 
+    # resolve return code 3 from spark failure
+    "mapred.map.tasks.speculative.execution": "true",
+    "mapred.reduce.tasks.speculative.execution": "true",
+
     # let spark app wait longer for executors' responses
-    # "hive.spark.client.connect.timeout": "30000ms",
-    # "hive.spark.client.server.connect.timeout": "300000ms"
+    "hive.spark.client.connect.timeout": "30000ms",
+    "hive.spark.client.server.connect.timeout": "300000ms"
 }
 
 PROGRESSBAR = {

@@ -5,7 +5,7 @@ import os
 import time
 from typing import Union
 import logging
-from tqdm.auto import tqdm
+from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
@@ -95,8 +95,8 @@ class hue:
     def run_sqls(self,
                  sqls,
                  database="default",
-                 n_jobs=3,
-                 wait_sec=0,
+                 n_jobs=2,
+                 wait_sec=1,
                  progressbar=True,
                  progressbar_offset=0,
                  sync=True
