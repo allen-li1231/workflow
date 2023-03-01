@@ -95,8 +95,8 @@ class hue:
     def run_sqls(self,
                  sqls,
                  database="default",
-                 n_jobs=2,
-                 wait_sec=1,
+                 n_jobs=3,
+                 wait_sec=0,
                  progressbar=True,
                  progressbar_offset=0,
                  sync=True
@@ -312,12 +312,9 @@ class hue:
             os.remove(path)
 
         for excel in lst_paths:
-            try:
                 df = pd.read_csv(excel, encoding="utf-8")
                 append_df_to_csv(path, df, encoding="utf-8", index=False)
                 os.remove(excel)
-            except FileNotFoundError as e:
-                self.log.error(e)
 
         self.log.info("cleaning up caches")
         self.run_sqls(lst_drop_tmp_table, progressbar=False)

@@ -12,7 +12,6 @@ HUE_INACTIVE_TIME = 1800
 TEZ_SESSION_TIMEOUT_SECS = 300
 
 HIVE_PERFORMANCE_SETTINGS = {
-    "hive.query.name": "root.fengkong",
     # resource settings:
     # "mapreduce.map.memory.mb": f"{4096 * 2}",
     # "mapreduce.reduce.memory.mb": f"{8192 * 2}",
@@ -78,10 +77,12 @@ HIVE_PERFORMANCE_SETTINGS = {
 
     # refer to: "Hive Understanding concurrent sessions queue allocation"
     "hive.execution.engine": "spark",
+    "tez.queue.name": "root.fengkong",
     "hive.tez.auto.reducer.parallelism": "true",
     # https://blog.cloudera.com/optimizing-hive-on-tez-performance/
     "hive.prewarm.enabled": "true",
     # refer to: "Configure Tez Container Reuse"
+    "tez.am.mode.session": "true",
     "tez.session.am.dag.submit.timeout.secs": f"{TEZ_SESSION_TIMEOUT_SECS}",
     "tez.am.container.reuse.enabled": "true",
     "tez.am.container.session.delay-allocation-millis": f"{TEZ_SESSION_TIMEOUT_SECS * 1000}",
