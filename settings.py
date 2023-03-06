@@ -76,7 +76,7 @@ HIVE_PERFORMANCE_SETTINGS = {
     "hive.compute.query.using.stats": "true",
 
     # refer to: "Hive Understanding concurrent sessions queue allocation"
-    "hive.execution.engine": "spark",
+    "hive.execution.engine": "tez",
     "tez.queue.name": "root.fengkong",
     "hive.tez.auto.reducer.parallelism": "true",
     # https://blog.cloudera.com/optimizing-hive-on-tez-performance/

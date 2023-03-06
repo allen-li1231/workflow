@@ -97,8 +97,8 @@ class SSH(paramiko.SSHClient, Tunnel):
 
     def close(self):
         self.log.debug(f"close print thread and do logout")
-        self.shell.send("logout\r")
-        self.shell.send("exit\r")
+        self.execute("logout")
+        self.execute("exit")
         self.print_thread.keep_running = False
         self.print_thread.join()
         super().close()

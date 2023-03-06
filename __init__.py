@@ -583,13 +583,6 @@ class hue:
             suffix = os.path.basename(path).rpartition('.')[-1]
 
         if use_hue and (decrypt_columns is None or len(decrypt_columns) == 0):
-            sql = f"select {','.join(columns) if columns else '*'} from {table};"
-            res = self.run_sql(sql=sql,
-                               progressbar=progressbar,
-                               progressbar_offset=progressbar_offset,
-                               print_log=False,
-                               new_notebook=new_notebook)
-            res.rows_per_fetch = rows_per_fetch
             if progressbar:
                 table_size = (self.run_sql(f'show tblproperties {table}("numRows")',
                                            progressbar=False,
@@ -597,6 +590,14 @@ class hue:
                                            print_log=False,
                                            new_notebook=new_notebook)
                     .fetchall(progressbar=False)["data"][0][0])
+            
+            sql = f"select {','.join(columns) if columns else '*'} from {table};"
+            res = self.run_sql(sql=sql,
+                               progressbar=progressbar,
+                               progressbar_offset=progressbar_offset,
+                               print_log=False,
+                               new_notebook=new_notebook)
+            res.rows_per_fetch = rows_per_fetch
             df = pd.DataFrame(**res.fetchall(total=int(table_size) if progressbar and table_size.isdigit() else None,
                                              progressbar=progressbar,
                                              progressbar_offset=progressbar_offset))
