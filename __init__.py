@@ -131,7 +131,11 @@ class hue:
         i = 0
         d_future = {}
         lst_result = [None] * len(sqls)
-        setup_pbar = PROGRESSBAR.copy()
+        if progressbar:
+            setup_pbar = PROGRESSBAR.copy()
+            del setup_pbar["desc"]
+            pbar = tqdm(total=len(sqls), desc="run_sqls progress",
+                        position=progressbar_offset, **setup_pbar)
 
         while i < len(sqls) or len(d_future) > 0:
             # check and collect completed results
@@ -139,13 +143,13 @@ class hue:
                 result = notebook._result
                 try:
                     result.check_status()
-                    if progressbar:
-                        result.update_progressbar(result._progressbar)
                     if sync and not result.is_ready():
                         continue
 
                     lst_result[idx] = result
                     del d_future[notebook]
+                    if progressbar:
+                        pbar.update(1)
                 except Exception as e:
                     self.log.warning(e)
                     sql = sqls[idx]
@@ -155,6 +159,8 @@ class hue:
                         f"{sql[: MAX_LEN_PRINT_SQL] + '...' if len(sql) > MAX_LEN_PRINT_SQL else sql}")
                     lst_result[idx] = e
                     del d_future[notebook]
+                    if progressbar:
+                        pbar.update(1)
 
             # add task to job pool when there exists vacancy
             while i < len(sqls) and (len(d_future) < n_jobs or not sync):
@@ -162,12 +168,9 @@ class hue:
                 try:
                     result = worker.execute(sqls[i],
                                             database=database,
+                                            progressbar=False,
                                             sync=False)
                     d_future[worker] = i
-                    if progressbar:
-                        setup_pbar["desc"] = PROGRESSBAR["desc"].format(name=worker.name, result="result")
-                        result._progressbar = tqdm(total=100, position=i + progressbar_offset, **setup_pbar)
-
                 except Exception as e:
                     self.log.warning(e)
                     self.log.warning(
@@ -175,15 +178,15 @@ class hue:
                         f"result of the following sql is truncated: "
                         f"{sqls[i][: MAX_LEN_PRINT_SQL] + '...' if len(sqls[i]) > MAX_LEN_PRINT_SQL else sqls[i]}")
                     lst_result[i] = e
+                    if progressbar:
+                        pbar.update(1)
                 finally:
                     i += 1
 
             time.sleep(wait_sec)
 
         if progressbar:
-            for result in lst_result:
-                if hasattr(result, "_progressbar"):
-                    result._progressbar.close()
+            pbar.close()
 
         return lst_result
 
