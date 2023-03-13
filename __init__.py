@@ -551,6 +551,7 @@ class hue:
                   column_names: list = None,
                   decrypt_columns: list = None,
                   path: str = None,
+                  encoding: str = "utf-8",
                   use_hue: bool = False,
                   new_notebook: bool = False,
                   rows_per_fetch: int = 32768,
@@ -567,7 +568,9 @@ class hue:
                         default to all columns
         :param column_names: rename column names if needed
         :param decrypt_columns: columns to be decrypted
-        :param path: default None, path to save table data, not to save table if None
+        :param path: default None, path to save table data,
+                     if path is given, the method will return None
+        :param encoding: if path is specified, will handle encoding of saved file
         :param use_hue: default False, whether try to fetch specified data from hue
         :param new_notebook: default False, whether to open a new Notebook, this is not designed for user use
         :param rows_per_fetch: rows to fetch per request, tweak it if encounter "Too many sessions" error
@@ -575,7 +578,7 @@ class hue:
         :param progressbar_offset: use this parameter to control sql progressbar positions
         :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
 
-        :return: Pandas.DataFrame
+        :return: Pandas.DataFrame or None if path is given
         """
 
         if path:
@@ -583,17 +586,10 @@ class hue:
             if not os.path.exists(dir_path):
                 self.log.error(f"directory '{dir_path}' does not exist")
                 raise NotADirectoryError(f"directory '{dir_path}' does not exist")
+
             suffix = os.path.basename(path).rpartition('.')[-1]
 
         if use_hue and (decrypt_columns is None or len(decrypt_columns) == 0):
-            if progressbar:
-                table_size = (self.run_sql(f'show tblproperties {table}("numRows")',
-                                           progressbar=False,
-                                           progressbar_offset=progressbar_offset,
-                                           print_log=False,
-                                           new_notebook=new_notebook)
-                    .fetchall(progressbar=False)["data"][0][0])
-            
             sql = f"select {','.join(columns) if columns else '*'} from {table};"
             res = self.run_sql(sql=sql,
                                progressbar=progressbar,
@@ -601,9 +597,15 @@ class hue:
                                print_log=False,
                                new_notebook=new_notebook)
             res.rows_per_fetch = rows_per_fetch
-            df = pd.DataFrame(**res.fetchall(total=int(table_size) if progressbar and table_size.isdigit() else None,
-                                             progressbar=progressbar,
-                                             progressbar_offset=progressbar_offset))
+            if path and suffix == 'csv':
+                res.to_csv(path, column_names=column_names, encoding=encoding)
+                return
+
+            df = pd.DataFrame(**res.fetchall(
+                progressbar=progressbar,
+                progressbar_offset=progressbar_offset
+                )
+            )
             if column_names:
                 if len(df.columns) != len(column_names):
                     self.log.warning(f"length of table columns({len(columns)}) "
@@ -614,10 +616,12 @@ class hue:
                 if suffix in ('xlsx', 'xls', 'xlsm'):
                     df.to_excel(path, index=False, engine=EXCEL_ENGINE)
                 else:
-                    df.to_csv(path, index=False)
-            return df
+                    # save to default csv format whatever suffix is
+                    df.to_csv(path, index=False, encoding=encoding)
+            else:
+                return df
         elif reason is None:
-            raise TypeError(f"must specify reason if there has column to be decrypted")
+            raise ValueError(f"must specify reason if there has column to be decrypted")
         else:
             return self.hue_download.download(table=table,
                                               reason=reason,
