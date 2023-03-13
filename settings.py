@@ -52,6 +52,9 @@ HIVE_PERFORMANCE_SETTINGS = {
     # BUG: on cluster 166, this causes "ReduceWork" cannot be casted to "MapWork" error using Hive on Spark
     #"hive.optimize.bucketmapjoin": "true",
     "hive.optimize.bucketmapjoin.sortedmerge": "true",
+    # total size of (n-1) tables that can be converted to mapjoin
+    # ref: http://www.openkb.info/2016/01/difference-between-hivemapjoinsmalltabl.html
+    "hive.auto.convert.join.noconditionaltask.size": "268435456",
     # BUG: on cluster 185, enabling all these ones could cause Vertex Error:
     "hive.auto.convert.sortmerge.join": "true",
     "hive.auto.convert.sortmerge.join.noconditionaltask": "true",

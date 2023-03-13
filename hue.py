@@ -188,7 +188,7 @@ class Notebook(requests.Session):
     Hue Notebook API
     An intergraded hiveql platform
 
-    Parameters：
+    Parameters:
     username: str, default None
         Hue username, if not provided here, user need to call self.login manually
     password: str, Hue password, default None
@@ -949,7 +949,7 @@ class NotebookResult(object):
         return res
 
     def fetch_result_size(self):
-        # this might be inaccurate when sql contains `limit`
+        # this might be inaccurate when sql contains `limit` clause
         res = self._fetch_result_size()
         res = res.json()
         if res["status"] != 0:
@@ -1053,6 +1053,7 @@ class NotebookResult(object):
     def to_csv(self,
                file_name: str = None,
                encoding="utf-8",
+               column_names: list = None,
                total: int = None,
                progressbar=True,
                progressbar_offset=0):
@@ -1061,6 +1062,11 @@ class NotebookResult(object):
         For now, only support csv file.
 
         :param file_name:  default notebook name
+        :param encoding: file encoding, default to utf-8
+        :param column_names: column names to rename to, default to original names
+        :param total: a hint of rows passed by user,
+                      if None passed and show progressbar, will try fetch_result_size api
+        :param progressbar: default to True, whether to show progressbar
         :param encoding: file encoding, default to utf-8
         """
         if file_name is None:
@@ -1074,13 +1080,13 @@ class NotebookResult(object):
         if not os.path.exists(abs_dir):
             os.makedirs(abs_dir)
 
-        if total is None:
-            total, size = self.fetch_result_size()
-
         abs_path = os.path.join(abs_dir, base_name)
 
         self.log.info(f"downloading to {abs_path}")
         if progressbar:
+            if total is None:
+                total, size = self.fetch_result_size()
+
             setup_progressbar = PROGRESSBAR.copy()
             setup_progressbar["desc"] = setup_progressbar["desc"].format(
                 name=self.name,
@@ -1093,6 +1099,7 @@ class NotebookResult(object):
                         position=progressbar_offset,
                         unit="rows",
                         **setup_progressbar)
+
         with open(abs_path, "w", newline="", encoding=encoding) as f:
             writer = csv.writer(f)
 
@@ -1107,7 +1114,11 @@ class NotebookResult(object):
             lst_metadata = [m["name"].rpartition(".")[2]
                             for m in res["meta"]]
 
-            writer.writerow(lst_metadata)
+            if column_names:
+                writer.writerow(column_names)
+            else:
+                writer.writerow(lst_metadata)
+
             writer.writerows(lst_data)
 
             if progressbar:
