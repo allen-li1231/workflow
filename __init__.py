@@ -454,6 +454,7 @@ class hue:
                wait_sec: int = 5,
                timeout: float = float("inf"),
                table_name: str = None,
+               if_rename_fail: str = "raise",
                **info_kwargs
                ):
         """
@@ -471,10 +472,14 @@ class hue:
         :param timeout: maximum seconds to wait for the server preparation
                        default to wait indefinitely
         :param table_name: str, user can nominate final table name
+        :param if_rename_fail: str, method behavior if renaming to table_name returns any error
+            "raise" meaning to raise error, "silent" to return name of uploaded table as usual
         :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
 
         :return: str, name of uploaded table
         """
+        if if_rename_fail not in ('raise', 'silent'):
+            raise ValueError("if_rename_fail only accept 'raise' or 'silent'")
 
         uploaded_table = self.hue_download.upload(data=data,
                                                   reason=reason,
@@ -493,9 +498,14 @@ class hue:
             self.log.info('data has uploaded to the table ' + table_name)
             return table_name
         except Exception as e:
-            self.log.warning(e)
-            self.log.warning('data has uploaded to the table ' + uploaded_table)
-            return uploaded_table
+            if if_rename_fail == 'raise':
+                self.log.exception(e)
+                raise e
+            elif if_rename_fail == 'silent':
+                self.log.warning(e)
+                self.log.warning('data has uploaded to the table ' + uploaded_table)
+        
+        return uploaded_table
 
     def insert_data(self,
                     data,
