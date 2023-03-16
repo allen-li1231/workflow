@@ -21,6 +21,9 @@ def ensure_login(func):
                 and "/* login required */" in res.text:
             self.login()
             return func(self, *args, **kwargs)
+        
+        if hasattr(self, "_last_execute"):
+            self._last_execute = time.perf_counter()
         return res
 
     return wrapper
