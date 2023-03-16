@@ -11,7 +11,7 @@ paramiko.util.log_to_file(logger.log_file, level=logging.INFO)
 
 
 class SFTP(paramiko.SFTPClient):
-    def __init__(self, username, password, host=None, port=None, verbose=False):
+    def __init__(self, username, password, host, port=None, verbose=False):
         self.username = username
         self._password = password
         self.host = host
@@ -31,7 +31,7 @@ class SFTP(paramiko.SFTPClient):
 
 
 class SSH(paramiko.SSHClient):
-    def __init__(self, username, password, host=None, port=SSH_PORT, file=sys.stdout, verbose=False):
+    def __init__(self, username, password, host, port=SSH_PORT, file=sys.stdout, verbose=False):
         self.username = username
         self._password = password
         self.host = host
