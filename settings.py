@@ -56,10 +56,10 @@ HIVE_PERFORMANCE_SETTINGS = {
     # ref: http://www.openkb.info/2016/01/difference-between-hivemapjoinsmalltabl.html
     "hive.auto.convert.join.noconditionaltask.size": "268435456",
     # BUG: on cluster 185, enabling all these ones could cause Vertex Error:
-    "hive.auto.convert.sortmerge.join": "true",
-    "hive.auto.convert.sortmerge.join.noconditionaltask": "true",
-    "hive.auto.convert.sortmerge.join.bigtable.selection.policy": "org.apache.hadoop.hive.ql.optimizer.TableSizeBasedBigTableSelectorForAutoSMJ",
-    "hive.auto.convert.sortmerge.join.to.mapjoin": "true",
+    #"hive.auto.convert.sortmerge.join": "true",
+    #"hive.auto.convert.sortmerge.join.noconditionaltask": "true",
+    #"hive.auto.convert.sortmerge.join.bigtable.selection.policy": "org.apache.hadoop.hive.ql.optimizer.TableSizeBasedBigTableSelectorForAutoSMJ",
+    #"hive.auto.convert.sortmerge.join.to.mapjoin": "true",
 
     # allow subdirectory in mapreduce
     "hive.mapred.supports.subdirectories": "true",
