@@ -370,9 +370,9 @@ class hue:
                   decrypt_columns if decrypt_columns and any(decrypt_columns) else [None] * len(tables),
                   paths if paths and any(paths) else [None] * len(tables)]
 
-        if use_hue and n_jobs > 10 \
+        if not use_hue and n_jobs > 10 \
                 and ("size" not in info_kwargs
-                     or ("size" in info_kwargs and info_kwargs["size"] <= 10)):
+                     or info_kwargs["size"] <= 10):
             info_kwargs["size"] = n_jobs
 
         d_future = {}
@@ -454,6 +454,7 @@ class hue:
                wait_sec: int = 5,
                timeout: float = float("inf"),
                table_name: str = None,
+               if_table_exists: str = "raise",
                **info_kwargs
                ):
         """
@@ -471,10 +472,14 @@ class hue:
         :param timeout: maximum seconds to wait for the server preparation
                        default to wait indefinitely
         :param table_name: str, user can nominate final table name
+        :param if_table_exists: str, method behavior if renaming to table_name returns any error
+            "raise" meaning to raise error, "silent" to return name of uploaded table as usual
         :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
 
         :return: str, name of uploaded table
         """
+        if if_table_exists not in ('raise', 'silent', 'replace'):
+            raise ValueError("if_table_exists only accept 'raise', 'silent' or 'replace'")
 
         uploaded_table = self.hue_download.upload(data=data,
                                                   reason=reason,
@@ -493,9 +498,19 @@ class hue:
             self.log.info('data has uploaded to the table ' + table_name)
             return table_name
         except Exception as e:
-            self.log.warning(e)
-            self.log.warning('data has uploaded to the table ' + uploaded_table)
-            return uploaded_table
+            if e.args and "Table already exists" in e.args[0]:
+                if if_table_exists == 'raise':
+                    self.log.exception(e)
+                elif if_table_exists == 'silent':
+                    self.log.warning(e)
+                    self.log.warning('data has uploaded to the table ' + uploaded_table)
+                    return uploaded_table
+                elif if_table_exists == 'replace':
+                    self.run_sql(f'DROP TABLE IF EXISTS {table_name}', progressbar=False)
+                    self.run_sql('ALTER TABLE %s RENAME TO %s' % (uploaded_table, table_name))
+                    self.log.info('data has uploaded to the table ' + table_name)
+                    return table_name
+            raise e
 
     def insert_data(self,
                     data,

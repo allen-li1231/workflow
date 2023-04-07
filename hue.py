@@ -248,7 +248,7 @@ class Notebook(requests.Session):
     def is_logged_in(self):
         if not hasattr(self, "_last_execute"):
             return False
-        
+
         return time.perf_counter() - self._last_execute < HUE_INACTIVE_TIME
 
     def login(self, username: str = None, password: str = None):

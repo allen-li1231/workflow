@@ -155,6 +155,8 @@ def append_df_to_excel(filename, df: pd.DataFrame,
         book = load_workbook(filename)
         if startrow is None and sheet_name in book.sheetnames:
             startrow = book[sheet_name].max_row
+        elif startrow is None:
+            startrow = 0
 
         with pd.ExcelWriter(
             filename,
@@ -166,8 +168,8 @@ def append_df_to_excel(filename, df: pd.DataFrame,
             ) as writer:
             df.to_excel(writer,
                         sheet_name=sheet_name,
-                        startrow=startrow if startrow is not None else 0,
-                        header=None,
+                        startrow=startrow,
+                        header=sheet_name not in book.sheetnames,
                         **to_excel_kwargs)
     else:
         writer = pd.ExcelWriter(filename,
