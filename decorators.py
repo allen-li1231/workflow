@@ -18,7 +18,9 @@ def ensure_login(func):
 
         if isinstance(res, requests.models.Response) \
                 and res._content_consumed \
-                and "/* login required */" in res.text:
+                and ("/* login required */" in res.text
+                    or '"error":"Unauthorized"' in res.text
+                ):
             self.login()
             return func(self, *args, **kwargs)
         
