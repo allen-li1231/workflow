@@ -10,7 +10,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
 from .hue import Notebook
-from .settings import MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR, EXCEL_ENGINE
+from .settings import MAX_LEN_PRINT_SQL, HUE_DOWNLOAD_LARGE_TABLE_ROWS, \
+    HUE_MAX_CONCURRENT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR, EXCEL_ENGINE
 from .hue_download import HueDownload
 from .utils import append_df_to_csv
 from . import logger
@@ -95,10 +96,11 @@ class hue:
     def run_sqls(self,
                  sqls,
                  database="default",
-                 n_jobs=3,
+                 n_jobs=HUE_MAX_CONCURRENT_SQL,
                  wait_sec=0,
                  progressbar=True,
                  progressbar_offset=0,
+                 desc: str="run_sqls progress",
                  sync=True
                  ):
         """
@@ -134,8 +136,8 @@ class hue:
         if progressbar:
             setup_pbar = PROGRESSBAR.copy()
             del setup_pbar["desc"]
-            pbar = tqdm(total=len(sqls), desc="run_sqls progress",
-                        position=progressbar_offset, **setup_pbar)
+            pbar = tqdm(total=len(sqls), desc=desc,
+                position=progressbar_offset, **setup_pbar)
 
         while i < len(sqls) or len(d_future) > 0:
             # check and collect completed results
@@ -206,8 +208,9 @@ class hue:
                  n_jobs: int = 10,
                  progressbar: bool = True,
                  progressbar_offset: int = 0,
-                 print_log=False,
-                 **info_kwargs
+                 print_log: bool = False,
+                 check_table_size: Union[bool, int] = True,
+                 info_kwargs: dict = None
                  ):
         """
         a refactored version of download_data from WxCustom
@@ -227,6 +230,8 @@ class hue:
         :param progressbar: whether to show a progressbar
         :param progressbar_offset: position of tqdm progressbar
         :param print_log: whether to print cloud log to console
+        :param check_table_size: default to True, whether to determine if table's number of rows
+            exceeds limitation of HueDownload platform, pass the number of row if you know the exact size
         :param info_kwargs: to modify default get_info_by_id parameters, add argument pairs here
                             (useful when downloadables cannot be found in just one page)
 
@@ -239,18 +244,34 @@ class hue:
             if not os.path.exists(dir_path):
                 raise NotADirectoryError(f"path does not exist: '{path}'")
 
-        table_rows = (self
-            .run_sql(f"select count(*) from {table}", progressbar=False)
-            .fetchall(progressbar=False)["data"][0][0])
-        if not isinstance(table_rows, int) or table_rows <= 1e5:
-            return self.hue_download.download(
-                table=table,
-                reason=reason,
-                columns=columns,
-                column_names=column_names,
-                decrypt_columns=decrypt_columns,
-                path=path,
-                **info_kwargs)
+        if isinstance(check_table_size, bool) and check_table_size:
+            self.log.info(f"checking size of table {table}")
+            table_rows = (self
+                .run_sql(f"select count(*) from {table}", progressbar=False, new_notebook=True)
+                .fetchall(progressbar=False)["data"][0][0])
+            self.log.info(f"got {table} table size {table_rows}")
+        elif isinstance(check_table_size, int):
+            table_rows = check_table_size
+
+        if not check_table_size \
+            or table_rows <= HUE_DOWNLOAD_LARGE_TABLE_ROWS:
+            if isinstance(info_kwargs, dict) and len(info_kwargs):
+                return self.hue_download.download(
+                    table=table,
+                    reason=reason,
+                    columns=columns,
+                    column_names=column_names,
+                    decrypt_columns=decrypt_columns,
+                    path=path,
+                    **info_kwargs)
+            else:
+                return self.hue_download.download(
+                    table=table,
+                    reason=reason,
+                    columns=columns,
+                    column_names=column_names,
+                    decrypt_columns=decrypt_columns,
+                    path=path)
 
         self.log.info(f"downloading large table '{table}'. split into chunks and batch download")
         # pre-execute preparation
@@ -263,7 +284,7 @@ class hue:
         lst_create_tmp_table = []
         lst_drop_tmp_table = []
         str_insert_tmp_table_query = f"from (select *, ROW_NUMBER() OVER () as tmp_row from {table}) t"
-        for i in range(1, table_rows + 1, 100000):
+        for i in range(1, table_rows + 1, HUE_DOWNLOAD_LARGE_TABLE_ROWS):
             tmp_table = str_tmp_table.format(int(time.time() * 1000))
             lst_tmp_tables.append(tmp_table)
             lst_create_tmp_table.append(str_create_tmp_table.format(tmp_table))
@@ -290,15 +311,21 @@ class hue:
 
             self.log.info("downloading chunks")
             lst_paths = [f"{path}.wfdl{i}" for i in range(len(lst_tmp_tables))]
+            if isinstance(info_kwargs, dict) and "size" in info_kwargs:
+                info_kwargs["size"] += len(lst_tmp_tables) - 1
+            elif isinstance(info_kwargs, dict):
+                info_kwargs["size"] = len(lst_tmp_tables)
+
             self.batch_download(lst_tmp_tables,
                                 reasons=reason,
                                 columns=[columns] * len(lst_tmp_tables),
                                 decrypt_columns=[decrypt_columns] * len(lst_tmp_tables),
                                 paths=lst_paths,
                                 n_jobs=n_jobs,
+                                check_table_size=False,
                                 progressbar=progressbar,
                                 progressbar_offset=progressbar_offset,
-                                **info_kwargs)
+                                info_kwargs=info_kwargs)
         except Exception as e:
             self.run_sqls(lst_drop_tmp_table, progressbar=False)
             self.hue_sys.unset_hive("tez.grouping.split-count")
@@ -315,9 +342,9 @@ class hue:
             os.remove(path)
 
         for excel in lst_paths:
-                df = pd.read_csv(excel, encoding="utf-8")
-                append_df_to_csv(path, df, encoding="utf-8", index=False)
-                os.remove(excel)
+            df = pd.read_csv(excel, encoding="utf-8")
+            append_df_to_csv(path, df, encoding="utf-8", index=False)
+            os.remove(excel)
 
         self.log.info("cleaning up caches")
         self.run_sqls(lst_drop_tmp_table, progressbar=False)
@@ -330,10 +357,11 @@ class hue:
                        decrypt_columns: list = None,
                        paths: list = None,
                        n_jobs: int = 10,
+                       check_table_size: bool = True,
                        use_hue: bool = False,
                        progressbar: bool = True,
                        progressbar_offset: int = 0,
-                       **info_kwargs
+                       info_kwargs: dict = None
                        ):
         """
         Batch downloading tasks
@@ -349,6 +377,8 @@ class hue:
                       when save file in .csv, the method is designed to download large table in low memory
         :param n_jobs: maximum concurrent download tasks
                        default to 10
+        :param check_table_size: default to True, whether to determine if table's number of rows
+            exceeds limitation of HueDownload platform, this is ignored when use_hue is True
         :param use_hue: whether to fetch data from hue
         :param progressbar: whether to show a progressbar
         :param progressbar_offset: position of tqdm progressbar
@@ -363,21 +393,45 @@ class hue:
                 and reasons is None:
             raise TypeError("must specify reason if there has any table's column needs to decrypt")
 
-        params = [tables,
-                  [reasons] * len(tables) if reasons is None or isinstance(reasons, str) else reasons,
-                  columns if columns and any(columns) else [None] * len(tables),
-                  column_names if column_names and any(column_names) else [None] * len(tables),
-                  decrypt_columns if decrypt_columns and any(decrypt_columns) else [None] * len(tables),
-                  paths if paths and any(paths) else [None] * len(tables)]
+        if not decrypt_columns is None:
+            assert len(decrypt_columns) == len(tables)
 
-        if not use_hue and n_jobs > 10 \
-                and ("size" not in info_kwargs
-                     or info_kwargs["size"] <= 10):
+        if not use_hue and check_table_size:
+            self.log.info(f"checking table sizes for {tables}")
+            lst_size = self.run_sqls([f"select count(*) from {table}" for table in tables],
+                desc="checking table sizes", progressbar=progressbar, progressbar_offset=progressbar_offset)
+            lst_size = [res.fetchall(progressbar=False)["data"][0][0] for res in lst_size]
+            self.log.info("got table size " + '\t'.join([f'{t}:{s}' for t, s in zip(tables, lst_size)]))
+        elif use_hue and check_table_size and isinstance(decrypt_columns, list) and any(decrypt_columns):
+            lst_size = [len(cols) > 0 if isinstance(cols, list) else False for cols in decrypt_columns]
+            lst_check_table = [table for table, check in zip(tables, lst_size) if check]
+            self.log.info(f"checking table sizes for {lst_check_table}")
+            lst_check_table_size = self.run_sqls([f"select count(*) from {table}" for table in lst_check_table],
+                desc="checking table sizes", progressbar=progressbar, progressbar_offset=progressbar_offset)
+            lst_check_table_size = [res.fetchall(progressbar=False)["data"][0][0] for res in lst_check_table_size]
+            self.log.info("got table size " + '\t'.join([f'{t}:{s}' for t, s in zip(lst_check_table, lst_check_table_size)]))
+            lst_size = [lst_check_table_size.pop(0) if check else False for check in lst_size]
+        else:
+            lst_size = [False] * len(tables)
+
+        params = [tables,
+            [reasons] * len(tables) if reasons is None or isinstance(reasons, str) else reasons,
+            columns if columns and any(columns) else [None] * len(tables),
+            column_names if column_names and any(column_names) else [None] * len(tables),
+            decrypt_columns if decrypt_columns and any(decrypt_columns) else [None] * len(tables),
+            paths if paths and any(paths) else [None] * len(tables),
+            lst_size
+        ]
+
+        if use_hue:
+            n_jobs = max(n_jobs, HUE_MAX_CONCURRENT_SQL)
+        elif n_jobs > 10 and ("size" not in info_kwargs
+                or info_kwargs["size"] < n_jobs):
             info_kwargs["size"] = n_jobs
 
         d_future = {}
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:
-            for i, (table, reason, cols, col_names, decrypt_cols, path) \
+            for i, (table, reason, cols, col_names, decrypt_cols, path, table_size) \
                     in enumerate(zip(*params)):
                 d_future[
                     executor.submit(
@@ -388,10 +442,11 @@ class hue:
                         column_names=col_names,
                         decrypt_columns=decrypt_cols,
                         path=path,
+                        check_table_size=table_size,
                         use_hue=use_hue,
                         new_notebook=True,
                         progressbar=False,
-                        **info_kwargs)
+                        info_kwargs=info_kwargs)
                 ] = i
 
             if progressbar:
@@ -399,7 +454,7 @@ class hue:
                 setup_pbar["desc"] = "batch downloading"
                 pbar = tqdm(total=len(d_future), miniters=0, position=progressbar_offset, **setup_pbar)
 
-            # won't work only if returned value is None
+            # the following loginc won't work only if returned value is None
             lst_result = [None] * len(d_future)
             for future in as_completed(d_future):
                 try:
@@ -473,7 +528,7 @@ class hue:
                        default to wait indefinitely
         :param table_name: str, user can nominate final table name
         :param if_table_exists: str, method behavior if renaming to table_name returns any error
-            "raise" meaning to raise error, "silent" to return name of uploaded table as usual
+            "raise" to raise error, "silent" to return name of uploaded table as usual
         :param info_kwargs: to modify get_info_by_id parameters, add argument pairs here
 
         :return: str, name of uploaded table
@@ -566,13 +621,14 @@ class hue:
                   column_names: list = None,
                   decrypt_columns: list = None,
                   path: str = None,
+                  check_table_size: Union[bool, int] = True,
                   encoding: str = "utf-8",
                   use_hue: bool = False,
                   new_notebook: bool = False,
                   rows_per_fetch: int = 32768,
                   progressbar: bool = True,
                   progressbar_offset: int = 0,
-                  **info_kwargs
+                  info_kwargs: dict = None
                   ):
         """
         get data from Hue to local as pandas dataframe
@@ -585,6 +641,9 @@ class hue:
         :param decrypt_columns: columns to be decrypted
         :param path: default None, path to save table data,
                      if path is given, the method will return None
+        :param check_table_size: default to True, whether to determine if table's number of rows
+            exceeds limitation of HueDownload platform, pass exact row number if you know the size.
+             this is ignored when use_hue is True
         :param encoding: if path is specified, will handle encoding of saved file
         :param use_hue: default False, whether try to fetch specified data from hue
         :param new_notebook: default False, whether to open a new Notebook, this is not designed for user use
@@ -623,7 +682,7 @@ class hue:
             )
             if column_names:
                 if len(df.columns) != len(column_names):
-                    self.log.warning(f"length of table columns({len(columns)}) "
+                    self.log.warning(f"length of table columns({len(df.columns)}) "
                                      f"mismatch with column_names({len(column_names)}), rename skipped")
                 else:
                     df.columns = column_names
@@ -638,13 +697,14 @@ class hue:
         elif reason is None:
             raise ValueError(f"must specify reason if there has column to be decrypted")
         else:
-            return self.hue_download.download(table=table,
-                                              reason=reason,
-                                              columns=columns,
-                                              column_names=column_names,
-                                              decrypt_columns=decrypt_columns,
-                                              path=path,
-                                              **info_kwargs)
+            return self.download(table=table,
+                                 reason=reason,
+                                 columns=columns,
+                                 column_names=column_names,
+                                 decrypt_columns=decrypt_columns,
+                                 path=path,
+                                 check_table_size=check_table_size,
+                                 info_kwargs=info_kwargs)
 
     def kill_app(self, app_id):
         """
