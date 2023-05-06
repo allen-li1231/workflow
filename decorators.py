@@ -8,8 +8,7 @@ def ensure_login(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         if not self.is_logged_in:
-            logger = logging.getLogger(func.__name__)
-            logger.warning(f"notebook not logged in while calling {func.__name__}")
+            self.log.warning(f"not logged in while calling {func.__name__}")
             self.login()
 
         res = func(self, *args, **kwargs)
@@ -20,6 +19,7 @@ def ensure_login(func):
                 and res._content_consumed \
                 and ("/* login required */" in res.text
                     or '"error":"Unauthorized"' in res.text
+                    or 'METHOD_NOT_ALLOWED' in res.text
                 ):
             self.login()
             return func(self, *args, **kwargs)
