@@ -553,7 +553,7 @@ class hue:
             self.log.info('data has uploaded to the table ' + table_name)
             return table_name
         except Exception as e:
-            if e.args and "Table already exists" in e.args[0]:
+            if e.args and "already exists" in e.args[0]:
                 if if_table_exists == 'raise':
                     self.log.exception(e)
                 elif if_table_exists == 'silent':
