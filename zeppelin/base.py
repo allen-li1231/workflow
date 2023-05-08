@@ -5,7 +5,7 @@ import requests
 
 from .. import logger
 from ..decorators import retry
-from ..settings import ZEPPELIN_URL, ZEPPELIN_INACTIVE_TIME, ZEPPELIN_PARAGRAPH_CONFIG, PROGRESSBAR
+from ..settings import ZEPPELIN_URL, ZEPPELIN_PARAGRAPH_CONFIG, PROGRESSBAR
 
 
 class ZeppelinBase(requests.Session):
@@ -29,21 +29,39 @@ class ZeppelinBase(requests.Session):
         return res
 
     @retry(__name__)
-    def _get_notebook(self):
+    def _list_notes(self):
         url = self.base_url + "/api/notebook"
         res = self.get(url)
         return res
 
     @retry(__name__)
-    def _create_notebook(self, name: str):
+    def _create_note(self, name: str, paragraphs: list):
         url = self.base_url + "/api/notebook"
-        res = self.post(url, json={"name": name})
+        res = self.post(url, json={"name": name, "paragraphs": paragraphs})
+        return res
+
+    @retry(__name__)
+    def _delete_note(self, note_id):
+        url = self.base_url + f"/api/notebook/{note_id}"
+        res = self.delete(url)
         return res
 
     @retry(__name__)
     def _import_note(self, note_json):
         url = self.base_url + f"/api/notebook/{self.note_id}"
         res = self.post(url, json=note_json)
+        return res
+
+    @retry(__name__)
+    def _clone_note(self, note_id, name):
+        url = self.base_url + f"/api/notebook/{note_id}"
+        res = self.post(url, json={"name": name})
+        return res
+
+    @retry(__name__)
+    def _export_note(self, note_id):
+        url = self.base_url + f"/api/notebook/export/{note_id}"
+        res = self.get(url)
         return res
 
 
@@ -53,7 +71,6 @@ class NoteBase(requests.Session):
 
         self.name = name
         self.note_id = note_id
-        self.zeppelin = zeppelin
         self.base_url = zeppelin.base_url
         self.log = logging.getLogger(__name__ + f".NoteBase")
         if zeppelin.verbose:
@@ -171,8 +188,6 @@ class ParagraphBase(requests.Session):
 
         self.paragraph_id = paragraph_id
         self.note_id = note.note_id
-        self.note = note
-        self.zeppelin = note.zeppelin
         self.base_url = note.base_url
         self.log = logging.getLogger(__name__ + f".ParagraphBase")
         if note.verbose:

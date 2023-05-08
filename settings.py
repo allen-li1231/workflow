@@ -129,12 +129,15 @@ JUMP_SERVER_PLSQL_SERVICE_NAME = "srcndb"
 
 # zeppelin
 ZEPPELIN_URL = "http://10.19.166.33:8080"
-ZEPPELIN_INACTIVE_TIME = 3600
+ZEPPELIN_INTERPRETER = "%zf_fk_spark.pyspark3"
+ZEPPELIN_INACTIVE_TIME = 3600.
 ZEPPELIN_PARAGRAPH_CONFIG = {
-    'editorSetting': {'language': 'python',
-    'editOnDblClick': False,
-    'completionSupport': True,
-    'completionKey': 'TAB'},
+    'editorSetting': {
+        'language': 'python',
+        'editOnDblClick': False,
+        'completionSupport': True,
+        'completionKey': 'TAB'
+    },
     'colWidth': 12.0,
     'editorMode': 'ace/mode/python',
     'fontSize': 9.0,
