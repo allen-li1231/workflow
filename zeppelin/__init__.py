@@ -40,65 +40,34 @@ class Zeppelin(ZeppelinBase):
                 and password is not None:
             self.login(self.username, password)
 
-    @property
-    def is_logged_in(self) -> bool:
-        if not hasattr(self, "_last_execute"):
-            return False
-
-        return time.perf_counter() - self._last_execute < ZEPPELIN_INACTIVE_TIME
-
-    def login(self, username: str = None, password: str = None):
-        self.username = username or self.username
-        self._password = password or self._password
-        if self.username is None and self._password is None:
-            raise ValueError("please provide username and password")
-
-        if self.username is None and self._password is not None:
-            raise KeyError("username must be specified with password")
-
-        if self.username is not None and self._password is None:
-            print("Please provide Zeppelin password:", end='')
-            self._password = input("")
-
-        self.log.debug(f"logging in for user: [{self.username}]")
-        res = self._login()
-        if res.status_code != 200:
-            self._password = None
-            self.log.error('login failed for [%s] at %s'
-                           % (self.username, self.base_url))
-            raise ValueError('login failed for [%s] at %s'
-                             % (self.username, self.base_url))
-        else:
-            self.log.info('login succeeful [%s] at %s'
-                          % (self.username, self.base_url))
-
-        return self
-    
     def _get_note_id_by_name(self, note_name: str):
         for note in self.list_notes():
             if note["name"] == note_name:
                 return note["id"]
-
-        raise FileNotFoundError("note name '{note_name}' does not exists")
+        msg = f"note name '{note_name}' does not exists"
+        self.log.warning(msg)
+        raise FileNotFoundError(msg)
         
     def _get_note_name_by_id(self, note_id: str):
         for note in self.list_notes():
             if note["id"] == note_id:
                 return note["name"]
 
-        raise FileNotFoundError("note id '{note_name}' does not exists")
+        msg = "note id '{note_name}' does not exists"
+        self.log.warning(msg)
+        raise FileNotFoundError(msg)
 
-    @ensure_login
     def list_notes(self):
         self.log.info("getting all notes")
         res = self._list_notes()
         r_json = res.json()
         if r_json["status"] != "OK":
-            self.log.error(r_json.get("message", r_json))
-        
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
+
         return r_json["body"]
 
-    @ensure_login
     def get_note(self, note_name, note_id):
         if note_name is None and note_id is None:
             raise ValueError("either name of note or node id should be given")
@@ -111,18 +80,18 @@ class Zeppelin(ZeppelinBase):
         
         return Note(self, name=note_name, note_id=note_id)
 
-    @ensure_login
     def create_note(self, name: str, paragraphs: None):
         self.log.info("creating note")
         res = self._create_note(name, paragraphs)
         r_json = res.json()
         if r_json["status"] != "OK":
-            self.log.error(r_json.get("message", r_json))
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
 
         assert isinstance(r_json["body"], str)
         return Note(self, name, r_json["body"])
 
-    @ensure_login
     def delete_note(self, note_name: str = None, note_id: str = None):
         if note_name is None and note_id is None:
             raise ValueError("either name of note or node id should be given")
@@ -137,9 +106,10 @@ class Zeppelin(ZeppelinBase):
 
         r_json = res.json()
         if r_json["status"] != "OK":
-            self.log.error(r_json.get("message", r_json))
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
 
-    @ensure_login
     def import_note(self, note: dict):
         if not isinstance(note, dict) or "name" not in note:
             raise TypeError("incorrect note format, please use build_note to create a note")
@@ -148,12 +118,13 @@ class Zeppelin(ZeppelinBase):
         res = self._import_note(note)
         r_json = res.json()
         if r_json["status"] != "OK":
-            self.log.error(r_json.get("message", r_json))
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
 
         assert isinstance(r_json["body"], str)
         return Note(self, note["name"], r_json["body"])
         
-    @ensure_login
     def clone_note(self,
         new_note_name: str,
         note_name: str = None,
@@ -172,12 +143,13 @@ class Zeppelin(ZeppelinBase):
 
         r_json = res.json()
         if r_json["status"] != "OK":
-            self.log.error(r_json.get("message", r_json))
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
 
         assert isinstance(r_json["body"], str)
         return Note(self, new_note_name, r_json["body"])
 
-    @ensure_login
     def export_note(self,
         note_name: str = None,
         note_id: str = None,
@@ -201,71 +173,281 @@ class Zeppelin(ZeppelinBase):
 
 
 class Note(NoteBase):
-    def __init__(self, zeppelin: Zeppelin, name: str, note_id: str):
+    def __init__(self,
+        zeppelin: Zeppelin,
+        name: str,
+        note_id: str,
+        verbose: bool = False):
+
+        self.verbose = verbose
+        self.log = logging.getLogger(__name__ + f".Note")
+        if verbose:
+            logger.set_stream_log_level(self.log, verbose=verbose)
+
         super().__init__(zeppelin, name, note_id)
 
-        self.zeppelin = zeppelin
-        # register method
-        self.login = zeppelin.login
-
-    @property
-    def _last_execute(self):
-        return self.zeppelin._last_execute
-
-    @_last_execute.setter
-    def _last_execute(self, value):
-        self.zeppelin._last_execute = value
-
-    @property
-    def is_logged_in(self):
-        return self.zeppelin.is_logged_in
-
-    @ensure_login
+    def get_paragraph(self, index):
+        #TODO
+        pass
+    
     def run_all(self):
         res = self._run_all()
 
 
 class Paragraph(ParagraphBase):
-    def __init__(self, note: Note, paragraph_id: str):
+    def __init__(self,
+        note: Note,
+        paragraph_id: str,
+        verbose: bool = False):
+
+        self.verbose = verbose
+        self.log = logging.getLogger(__name__ + f".Paragraph")
+        if verbose:
+            logger.set_stream_log_level(self.log, verbose=verbose)
+
         super().__init__(note, paragraph_id)
 
-        self.zeppelin = note.zeppelin
-        self.note = note
-        # register method
-        self.login = Zeppelin.login
+        self._cache = None
+
+    @classmethod
+    def build_paragraph(text: str,
+        title: None,
+        config: ZEPPELIN_PARAGRAPH_CONFIG,
+        interpreter: ZEPPELIN_INTERPRETER):
+
+        paragraph = {}
+        if title:
+            paragraph["title"] = title
+
+        if config:
+            paragraph["config"] = config
+
+        if interpreter:
+            text = f"%{interpreter}\n" + text
+
+        paragraph = {"text": text}
+        return paragraph
 
     @property
-    def _last_execute(self):
-        return self.zeppelin._last_execute
-
-    @_last_execute.setter
-    def _last_execute(self, value):
-        self.zeppelin._last_execute = value
+    def id(self):
+        return self._paragraph_id
 
     @property
-    def is_logged_in(self):
-        return self.zeppelin.is_logged_in
+    def is_cached(self):
+        return not self._cache is None
 
+    @property
+    def text(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' text from cache")
+            return self._cache["text"]
+
+        paragraph = self.get_info()
+        return paragraph["text"]
+
+    @text.setter
+    def text(self, value):
+        if not isinstance(value, str):
+            raise TypeError("text value must be string")
+
+        self.update(text=value)
+        if self.is_cached:
+            self._cache["text"] = value
+
+    @property
+    def title(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' title from cache")
+            return self._cache["title"]
+
+        paragraph = self.get_info()
+        return paragraph.get("title", None)
+
+    @title.setter
+    def title(self, value):
+        if not isinstance(value, str):
+            raise TypeError("title value must be string")
+
+        self.update(title=value)
+        if self.is_cached:
+            self._cache["title"] = value
+
+    @property
+    def date_updated(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' date_updated from cache")
+            return self._cache["dateUpdated"]
+
+        paragraph = self.get_info()
+        return paragraph["dateUpdated"]
+
+    @property
+    def config(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' config from cache")
+            return self._cache["config"]
+
+        paragraph = self.get_info()
+        return paragraph.get("config", None)
+
+    @config.setter
+    def config(self, value):
+        if not isinstance(value, str):
+            raise TypeError("config value must be string")
+        
+        self.update(config=value)
+        if self.is_cached:
+            self._cache["config"] = value
+
+    @property
+    def settings(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' settings from cache")
+            return self._cache["settings"]
+
+        paragraph = self.get_info()
+        return paragraph.get("settings", None)
+
+    @property
+    def job_name(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' jobName from cache")
+            return self._cache["jobName"]
+
+        paragraph = self.get_info()
+        return paragraph.get("jobName", None)
+
+    @property
+    def results(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' results from cache")
+            return self._cache["results"]
+
+        paragraph = self.get_info()
+        return paragraph.get("results", None)
+
+    @property
+    def date_created(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' dateCreated from cache")
+            return self._cache["dateCreated"]
+
+        paragraph = self.get_info()
+        return paragraph.get("dateCreated", None)
+
+    @property
+    def date_started(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' dateStarted from cache")
+            return self._cache["dateStarted"]
+
+        paragraph = self.get_info()
+        return paragraph.get("dateStarted", None)
+
+    @property
+    def date_finished(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' dateFinished from cache")
+            return self._cache["dateFinished"]
+
+        paragraph = self.get_info()
+        return paragraph.get("dateFinished", None)
+
+    @property
+    def status(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' status from cache")
+            return self._cache["status"]
+
+        paragraph = self.get_info()
+        return paragraph.get("status", None)
+    
+    @property
+    def progress_update_intervals(self):
+        if self.is_cached:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' progressUpdateIntervalMs from cache")
+            return self._cache["status"]
+
+        paragraph = self.get_info()
+        return paragraph.get("progressUpdateIntervalMs", None)
+
+    def get_info(self):
+        self.log.info(f"getting '{self._paragraph_id}' info")
+        res = self._get_info()
+        r_json = res.json()
+        if r_json["status"] != "OK":
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
+
+        self._cache = r_json["body"]
+        return r_json["body"]
+
+    def get_status(self):
+        self.log.info(f"getting '{self._paragraph_id}' status")
+        res = self._get_status()
+        r_json = res.json()
+        if r_json["status"] != "OK":
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
+
+        self._cache = r_json["body"]
+        return r_json["body"]
+    
+    def update_config(self, config: dict):
+        if not isinstance(config, dict):
+            err_msg = f"expect text as dict, got {type(config)}"
+            self.log.error(err_msg)
+            raise TypeError(err_msg)
+
+        self.log.info(f"updating '{self._paragraph_id}' config with {config}")
+        res = self._update_config(config)
+        r_json = res.json()
+        if r_json["status"] != "OK":
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
+
+    def update_text(self, text: str):
+        if not isinstance(text, str):
+            err_msg = f"expect text as str, got {type(text)}"
+            self.log.error(err_msg)
+            raise TypeError(err_msg)
+
+        self.log.info(f"updating '{self._paragraph_id}' text")
+        res = self._update_text(text)
+        r_json = res.json()
+        if r_json["status"] != "OK":
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
+
+    def update(self, **kwargs):
+        if not self.is_cached and len(kwargs) == 0:
+            self.log.warning("no argument to update, abort")
+            return
+
+        if len(kwargs) == 0:
+            kwargs["text"] = self._cache["text"]
+            if "config" in self._cache:
+                kwargs["config"] = self._cache["config"]
+            if "title" in self._cache:
+                kwargs["title"] = self._cache["title"]
+
+        if "config" in kwargs:
+            self.update_config(kwargs["config"])
+        if "text" in kwargs:
+            self.update_text(kwargs["text"])
+
+    def drop(self):
+        res = self._drop()
+        r_json = res.json()
+        if r_json["status"] != "OK":
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
 
 def build_note(note_name, paragraphs: list):
     assert isinstance(paragraphs, list)
-    assert "text
     
-
-def build_paragraph(text: str,
-    title: None,
-    config: ZEPPELIN_PARAGRAPH_CONFIG, 
-    interpreter: ZEPPELIN_INTERPRETER
-    ):
-    paragraph = {}
-    if title:
-        paragraph["title"] = title
-
-    if config:
-        paragraph["config"] = config
-
-    if interpreter:
-        text = f"%{interpreter}\n" + text
-
-    paragraph = {"text": text}
-    return paragraph
