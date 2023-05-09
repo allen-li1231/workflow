@@ -87,3 +87,18 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
         return wrapper
 
     return retry_wrapper
+
+
+def handle_zeppelin_response(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        res = func(self, *args, **kwargs)
+        r_json = res.json()
+        if r_json["status"] != "OK":
+            err_msg = r_json.get("message", r_json)
+            self.log.error(err_msg)
+            raise RuntimeError(err_msg)
+
+        return r_json
+
+    return wrapper

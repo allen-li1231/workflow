@@ -3,7 +3,6 @@ import logging
 
 from .base import ZeppelinBase, NoteBase, ParagraphBase
 from .. import logger
-from ..decorators import ensure_login
 from ..settings import ZEPPELIN_INTERPRETER, ZEPPELIN_INACTIVE_TIME, ZEPPELIN_PARAGRAPH_CONFIG
 
 __all__ = ["Zeppelin", "build_paragraph"]
@@ -59,13 +58,7 @@ class Zeppelin(ZeppelinBase):
 
     def list_notes(self):
         self.log.info("getting all notes")
-        res = self._list_notes()
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
-
+        r_json = self._list_notes()
         return r_json["body"]
 
     def get_note(self, note_name, note_id):
@@ -82,13 +75,7 @@ class Zeppelin(ZeppelinBase):
 
     def create_note(self, name: str, paragraphs: None):
         self.log.info("creating note")
-        res = self._create_note(name, paragraphs)
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
-
+        r_json = self._create_note(name, paragraphs)
         assert isinstance(r_json["body"], str)
         return Note(self, name, r_json["body"])
 
@@ -98,30 +85,18 @@ class Zeppelin(ZeppelinBase):
 
         self.log.info("deleting note")
         if note_id:
-            res = self._delete_note(note_id)
+            self._delete_note(note_id)
         else:
             # find note id w.r.t note name from list of all notes
             note_id = self.get_note_id_by_name(note_name)
-            res = self._delete_note(note_id)
-
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
+            self._delete_note(note_id)
 
     def import_note(self, note: dict):
         if not isinstance(note, dict) or "name" not in note:
             raise TypeError("incorrect note format, please use build_note to create a note")
 
         self.log.info("importing note")
-        res = self._import_note(note)
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
-
+        r_json = self._import_note(note)
         assert isinstance(r_json["body"], str)
         return Note(self, note["name"], r_json["body"])
         
@@ -139,13 +114,7 @@ class Zeppelin(ZeppelinBase):
         else:
             # find note id w.r.t note name from list of all notes
             note_id = self.get_note_id_by_name(note_name=note_name)
-            res = self._clone_note(note_id, new_note_name)
-
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
+            r_json = self._clone_note(note_id, new_note_name)
 
         assert isinstance(r_json["body"], str)
         return Note(self, new_note_name, r_json["body"])
@@ -373,25 +342,13 @@ class Paragraph(ParagraphBase):
 
     def get_info(self):
         self.log.info(f"getting '{self._paragraph_id}' info")
-        res = self._get_info()
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
-
+        r_json = self._get_info()
         self._cache = r_json["body"]
         return r_json["body"]
 
     def get_status(self):
         self.log.info(f"getting '{self._paragraph_id}' status")
-        res = self._get_status()
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
-
+        r_json = self._get_status()
         self._cache = r_json["body"]
         return r_json["body"]
     
@@ -402,26 +359,16 @@ class Paragraph(ParagraphBase):
             raise TypeError(err_msg)
 
         self.log.info(f"updating '{self._paragraph_id}' config with {config}")
-        res = self._update_config(config)
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
+        self._update_config(config)
 
-    def update_text(self, text: str):
+    def update_text(self, text: str, title: str = None):
         if not isinstance(text, str):
             err_msg = f"expect text as str, got {type(text)}"
             self.log.error(err_msg)
             raise TypeError(err_msg)
 
         self.log.info(f"updating '{self._paragraph_id}' text")
-        res = self._update_text(text)
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
+        self._update_text(text, title=title)
 
     def update(self, **kwargs):
         if not self.is_cached and len(kwargs) == 0:
@@ -430,15 +377,15 @@ class Paragraph(ParagraphBase):
 
         if len(kwargs) == 0:
             kwargs["text"] = self._cache["text"]
-            if "config" in self._cache:
-                kwargs["config"] = self._cache["config"]
             if "title" in self._cache:
                 kwargs["title"] = self._cache["title"]
+            if "config" in self._cache:
+                kwargs["config"] = self._cache["config"]
 
         if "config" in kwargs:
             self.update_config(kwargs["config"])
         if "text" in kwargs:
-            self.update_text(kwargs["text"])
+            self.update_text(kwargs["text"], title=kwargs.get("title", None))
 
     def drop(self):
         res = self._drop()
