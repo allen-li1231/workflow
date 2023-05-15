@@ -63,48 +63,48 @@ class ZeppelinBase(requests.Session):
         res = self.post(url, data={"userName": username, "password": password})
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _list_notes(self):
         url = self.base_url + "/api/notebook"
         res = self.get(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _create_note(self, name: str, paragraphs: list):
         url = self.base_url + "/api/notebook"
         res = self.post(url, json={"name": name, "paragraphs": paragraphs})
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _delete_note(self, note_id):
         url = self.base_url + f"/api/notebook/{note_id}"
         res = self.delete(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _import_note(self, note_json):
         url = self.base_url + f"/api/notebook/{self.note_id}"
         res = self.post(url, json=note_json)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _clone_note(self, note_id, name):
         url = self.base_url + f"/api/notebook/{note_id}"
         res = self.post(url, json={"name": name})
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _export_note(self, note_id):
         url = self.base_url + f"/api/notebook/export/{note_id}"
@@ -147,72 +147,72 @@ class NoteBase(requests.Session):
     def is_logged_in(self):
         return self.zeppelin.is_logged_in
     
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _get_all_status(self):
         url = self.base_url + f"/api/notebook/job/{self.note_id}"
         res = self.get(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _get_info(self):
         url = self.base_url + f"/api/notebook/{self.note_id}"
         res = self.get(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _delete_note(self):
         url = self.base_url + f"/api/notebook/{self.note_id}"
         res = self.delete(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _clone_note(self, name):
         url = self.base_url + f"/api/notebook/{self.note_id}"
         res = self.post(url, json={"name": name})
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _export_note(self):
         url = self.base_url + f"/api/notebook/export/{self.note_id}"
         res = self.get(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _run_all(self):
         url = self.base_url + f"/api/notebook/job/{self.note_id}"
         res = self.post(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _stop_all(self, name):
         url = self.base_url + f"/api/notebook/job/{self.note_id}"
         res = self.delete(url, json={"name": name})
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _clear_all_result(self):
         url = self.base_url + f"/api/notebook/{self.note_id}/clear"
         res = self.put(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _create_paragraph(self, text: str, title=None, index: int = -1, config: dict = None):
         url = self.base_url + f"/api/notebook/{self.note_id}/paragraph"
@@ -226,40 +226,40 @@ class NoteBase(requests.Session):
         res = self.post(url, json=payload)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _add_cron(self, cron: str, release_resource=False):
         url = self.base_url + f"/api/notebook/cron/{self.note_id}"
         res = self.post(url, json={"cron": cron, "releaseResource": release_resource})
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _remove_cron(self):
         url = self.base_url + f"/api/notebook/cron/{self.note_id}"
         res = self.delete(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _get_cron(self):
         url = self.base_url + f"/api/notebook/cron/{self.note_id}"
         res = self.get(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _get_permission(self):
         url = self.base_url + f"/api/notebook/{self.note_id}/permissions"
         res = self.get(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _set_permission(self, readers: list, owners: list, runners: list, writers: list):
         url = self.base_url + f"/api/notebook/cron/{self.note_id}"
@@ -306,24 +306,24 @@ class ParagraphBase(requests.Session):
     def is_logged_in(self):
         return self.zeppelin.is_logged_in
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _get_info(self):
         url = self.base_url + f"/api/notebook/{self.note_id}/paragraph/{self.paragraph_id}"
         res = self.get(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _get_status(self):
         url = self.base_url + f"/api/notebook/job/{self.note_id}/{self.paragraph_id}"
         res = self.get(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _update_text(self, text: str, title=None):
         url = self.base_url + f"/api/notebook/{self.note_id}/paragraph/{self.paragraph_id}"
@@ -334,24 +334,24 @@ class ParagraphBase(requests.Session):
         res = self.put(url, json=payload)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _update_config(self, config):
         url = self.base_url + f"/api/notebook/{self.note_id}/paragraph/{self.paragraph_id}/config"
         res = self.put(url, json=config)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _drop(self):
         url = self.base_url + f"/api/notebook/{self.note_id}/paragraph/{self.paragraph_id}"
         res = self.delete(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _execute(self, sync=True, option: dict = None):
         if sync:
@@ -362,16 +362,16 @@ class ParagraphBase(requests.Session):
         res = self.post(url, json=option)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _stop(self):
         url = self.base_url + f"/api/notebook/job/{self.note_id}/{self.paragraph_id}"
         res = self.delete(url)
         return res
 
-    @ensure_login
     @handle_zeppelin_response
+    @ensure_login
     @retry(__name__)
     def _move_to_index(self, index: int):
         url = self.base_url + f"/api/notebook/{self.note_id}/paragraph/{self.paragraph_id}/move/{index}"
