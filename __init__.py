@@ -401,7 +401,8 @@ class hue:
             lst_size = self.run_sqls([f"select count(*) from {table}" for table in tables],
                 desc="checking table sizes", progressbar=progressbar, progressbar_offset=progressbar_offset)
             lst_size = [res.fetchall(progressbar=False)["data"][0][0] for res in lst_size]
-            self.log.info("got table size " + '\t'.join([f'{t}:{s}' for t, s in zip(tables, lst_size)]))
+            self.log.info("got table size " + 
+                '\t'.join([f'{t}:{s}' for t, s in zip(tables, lst_size)]))
         elif use_hue and check_table_size and isinstance(decrypt_columns, list) and any(decrypt_columns):
             lst_size = [len(cols) > 0 if isinstance(cols, list) else False for cols in decrypt_columns]
             lst_check_table = [table for table, check in zip(tables, lst_size) if check]
@@ -409,7 +410,8 @@ class hue:
             lst_check_table_size = self.run_sqls([f"select count(*) from {table}" for table in lst_check_table],
                 desc="checking table sizes", progressbar=progressbar, progressbar_offset=progressbar_offset)
             lst_check_table_size = [res.fetchall(progressbar=False)["data"][0][0] for res in lst_check_table_size]
-            self.log.info("got table size " + '\t'.join([f'{t}:{s}' for t, s in zip(lst_check_table, lst_check_table_size)]))
+            self.log.info("got table size " + 
+                '\t'.join([f'{t}:{s}' for t, s in zip(lst_check_table, lst_check_table_size)]))
             lst_size = [lst_check_table_size.pop(0) if check else False for check in lst_size]
         else:
             lst_size = [False] * len(tables)
@@ -427,7 +429,7 @@ class hue:
             n_jobs = max(n_jobs, HUE_MAX_CONCURRENT_SQL)
         elif n_jobs > 10 and ("size" not in info_kwargs
                 or info_kwargs["size"] < n_jobs):
-            info_kwargs["size"] = n_jobs
+            info_kwargs["size"] = n_jobs + 1
 
         d_future = {}
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:
