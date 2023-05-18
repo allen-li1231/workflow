@@ -312,7 +312,7 @@ class hue:
             self.log.info("downloading chunks")
             lst_paths = [f"{path}.wfdl{i}" for i in range(len(lst_tmp_tables))]
             if isinstance(info_kwargs, dict) and "size" in info_kwargs:
-                info_kwargs["size"] += len(lst_tmp_tables) - 1
+                info_kwargs["size"] += len(lst_tmp_tables)
             elif isinstance(info_kwargs, dict):
                 info_kwargs["size"] = len(lst_tmp_tables)
 
@@ -341,13 +341,16 @@ class hue:
         if os.path.isfile(path):
             os.remove(path)
 
-        for excel in lst_paths:
-            df = pd.read_csv(excel, encoding="utf-8")
-            append_df_to_csv(path, df, encoding="utf-8", index=False)
-            os.remove(excel)
-
-        self.log.info("cleaning up caches")
-        self.run_sqls(lst_drop_tmp_table, progressbar=False)
+        try:
+            for excel in lst_paths:
+                df = pd.read_csv(excel, encoding="utf-8")
+                append_df_to_csv(path, df, encoding="utf-8", index=False)
+                os.remove(excel)
+        except Exception as e:
+            self.log.exception(e)
+            self.log.info("cleaning up caches")
+            self.run_sqls(lst_drop_tmp_table, progressbar=False)
+            raise e
 
     def batch_download(self,
                        tables: list,
