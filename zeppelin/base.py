@@ -190,6 +190,14 @@ class NoteBase(requests.Session):
     @handle_zeppelin_response
     @ensure_login
     @retry(__name__)
+    def _import_note(self, note: dict):
+        url = self.base_url + f"/api/notebook/import"
+        res = self.post(url, json=note)
+        return res
+
+    @handle_zeppelin_response
+    @ensure_login
+    @retry(__name__)
     def _run_all(self):
         url = self.base_url + f"/api/notebook/job/{self.note_id}"
         res = self.post(url)
@@ -198,9 +206,9 @@ class NoteBase(requests.Session):
     @handle_zeppelin_response
     @ensure_login
     @retry(__name__)
-    def _stop_all(self, name):
+    def _stop_all(self):
         url = self.base_url + f"/api/notebook/job/{self.note_id}"
-        res = self.delete(url, json={"name": name})
+        res = self.delete(url)
         return res
 
     @handle_zeppelin_response
@@ -345,7 +353,7 @@ class ParagraphBase(requests.Session):
     @handle_zeppelin_response
     @ensure_login
     @retry(__name__)
-    def _drop(self):
+    def _delete(self):
         url = self.base_url + f"/api/notebook/{self.note_id}/paragraph/{self.paragraph_id}"
         res = self.delete(url)
         return res
@@ -353,7 +361,7 @@ class ParagraphBase(requests.Session):
     @handle_zeppelin_response
     @ensure_login
     @retry(__name__)
-    def _execute(self, sync=True, option: dict = None):
+    def _run(self, sync=True, option: dict = None):
         if sync:
             url = self.base_url + f"/api/notebook/run/{self.note_id}/{self.paragraph_id}"
         else:

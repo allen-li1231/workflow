@@ -43,6 +43,7 @@ class Zeppelin(ZeppelinBase):
         for note in self.list_notes():
             if note["name"] == note_name:
                 return note["id"]
+
         msg = f"note name '{note_name}' does not exists"
         self.log.warning(msg)
         raise FileNotFoundError(msg)
@@ -61,7 +62,7 @@ class Zeppelin(ZeppelinBase):
         r_json = self._list_notes()
         return r_json["body"]
 
-    def get_note(self, note_name, note_id):
+    def get_note(self, note_name: str = None, note_id: str = None):
         if note_name is None and note_id is None:
             raise ValueError("either name of note or node id should be given")
 
@@ -101,10 +102,10 @@ class Zeppelin(ZeppelinBase):
         return Note(self, note["name"], r_json["body"])
         
     def clone_note(self,
-        new_note_name: str,
-        note_name: str = None,
-        note_id: str = None
-    ):
+            new_note_name: str,
+            note_name: str = None,
+            note_id: str = None):
+
         if note_name is None and note_id is None:
             raise ValueError("either name of original note or node id should be given")
 
@@ -120,9 +121,9 @@ class Zeppelin(ZeppelinBase):
         return Note(self, new_note_name, r_json["body"])
 
     def export_note(self,
-        note_name: str = None,
-        note_id: str = None,
-        path: str = None):
+            note_name: str = None,
+            note_id: str = None,
+            path: str = None):
 
         if note_name is None and note_id is None:
             raise ValueError("either name of original note or node id should be given")
@@ -143,10 +144,10 @@ class Zeppelin(ZeppelinBase):
 
 class Note(NoteBase):
     def __init__(self,
-        zeppelin: Zeppelin,
-        name: str,
-        note_id: str,
-        verbose: bool = False):
+                 zeppelin: Zeppelin,
+                 name: str,
+                 note_id: str,
+                 verbose: bool = False):
 
         self.verbose = verbose
         self.log = logging.getLogger(__name__ + f".Note")
@@ -155,19 +156,146 @@ class Note(NoteBase):
 
         super().__init__(zeppelin, name, note_id)
 
-    def get_paragraph(self, index):
-        #TODO
-        pass
-    
+    @classmethod
+    def build_note(note_name: str, paragraphs: list):
+        assert isinstance(note_name, str)
+        assert isinstance(paragraphs, list)
+        return {"name": note_name, "paragraphs": paragraphs}
+
+    @property
+    def info(self):
+        self.log.info(f"getting note[{self.name}] info")
+        r_json = self._get_info()
+        return r_json["body"]
+
     def run_all(self):
-        res = self._run_all()
+        self.log.info(f"running note[{self.name}]")
+        r_json = self._run_all()
+        return r_json
+
+    def stop_all(self):
+        self.log.info(f"stoping note[{self.name}]")
+        r_json = self._stop_all()
+        return r_json
+
+    def clear_all_result(self):
+        self.log.info(f"clearing all result in note[{self.name}]")
+        r_json = self._clear_all_result()
+        return r_json
+    
+    def get_all_status(self):
+        self.log.info(f"getting all paragraph status in note[{self.name}]")
+        r_json = self._get_all_status()
+        return r_json["body"]
+
+    def delete_note(self):
+        self.log.info(f"deleting note[{self.name}]")
+        r_json = self._delete_note()
+        return r_json
+
+    def clone(self, name: str, verbose=False):
+        self.log.info(f"cloning note[{self.name}]")
+        r_json = self._clone_note(name=name)
+        return Note(self.zeppelin,
+            name=name,
+            note_id=r_json["body"],
+            verbose=verbose)
+
+    def export_note(self):
+        self.log.info(f"exporting note[{self.name}]")
+        r_json = self._export_note()
+        return r_json
+
+    def import_note(self, note: dict, verbose=False):
+        if not isinstance(note, dict) \
+            or "paragraphs" not in note \
+            or "name" not in note:
+            raise TypeError("wrong note format given")
+
+        self.log.info(f"importing note[{self.name}]")
+        r_json = self._import_note(note)
+        return Note(self.zeppelin,
+            name=note["name"],
+            note_id=r_json["body"],
+            verbose=verbose)
+
+    def create_paragraph(self,
+            text: str,
+            title=None,
+            index: int = -1,
+            config: dict = None,
+            verbose: bool = False):
+
+        self.log.info(f"clearing all result in note[{self.name}]")
+        r_json = self._create_paragraph(text=text,
+            title=title,
+            index=index,
+            config=config)
+        return Paragraph(self, paragraph_id=r_json["body"], verbose=verbose)
+
+    def get_paragraph_by_index(self, index: int, verbose=False):
+        self.log.info(f"getting paragraph by index {index} from note[{self.name}]")
+        paragraph = self.info["paragraphs"][index]
+        return Paragraph(self, paragraph_id=paragraph["id"], verbose=verbose)
+
+    def get_paragraph_by_id(self, id_: str, verbose=False):
+        self.log.info(f"getting paragraph by id {id_} from note[{self.name}]")
+        paragraphs = self.info["paragraphs"]
+        for p in paragraphs:
+            if id_ == p["id"]:
+                return Paragraph(self, paragraph_id=p["id"], verbose=verbose)
+
+        msg = f"unable to get paragraph {id_} from note[{self.name}]"
+        self.log.warning(msg)
+        raise IndexError(msg)
+
+    def get_paragraph_by_pair(self, key: str, value, verbose=False):
+        self.log.info(f"getting paragraph by key: {key} and value: {value} from note[{self.name}]")
+        paragraphs = self.info["paragraphs"]
+        for p in paragraphs:
+            if value == p[key]:
+                return Paragraph(self, paragraph_id=p["id"], verbose=verbose)
+
+        msg = f"unable to get paragraph key: {key} and value: {value} from note[{self.name}]"
+        self.log.warning(msg)
+        raise IndexError(msg)
+
+    def add_cron(self, cron: str, release_resource=False):
+        self.log.info(f"adding cron '{cron}' to note[{self.name}]")
+        return self._add_cron(cron=cron, release_resource=release_resource)
+
+    def remove_cron(self):
+        self.log.info(f"removing cron from note[{self.name}]")
+        return self._remove_cron()
+
+    def remove_cron(self):
+        self.log.info(f"getting cron from note[{self.name}]")
+        return self._get_cron()
+
+    def get_permission(self):
+        self.log.info(f"getting permission from note[{self.name}]")
+        return self._get_permission()
+
+
+    def set_permission(self,
+            readers: list,
+            owners: list,
+            runners: list,
+            writers: list):
+
+        self.log.info(f"setting cron from note[{self.name}]")
+        return self._set_permission(readers=readers,
+            owners=owners,
+            runners=runners,
+            writers=writers)
 
 
 class Paragraph(ParagraphBase):
     def __init__(self,
-        note: Note,
-        paragraph_id: str,
-        verbose: bool = False):
+            note: Note,
+            paragraph_id: str,
+            verbose: bool = False,
+            info: dict = None):
 
         self.verbose = verbose
         self.log = logging.getLogger(__name__ + f".Paragraph")
@@ -176,13 +304,13 @@ class Paragraph(ParagraphBase):
 
         super().__init__(note, paragraph_id)
 
-        self._cache = None
+        self._cache = info or self._get_info()
 
     @classmethod
     def build_paragraph(text: str,
-        title: None,
-        config: ZEPPELIN_PARAGRAPH_CONFIG,
-        interpreter: ZEPPELIN_INTERPRETER):
+            title: None,
+            config: ZEPPELIN_PARAGRAPH_CONFIG,
+            interpreter: ZEPPELIN_INTERPRETER):
 
         paragraph = {}
         if title:
@@ -202,17 +330,9 @@ class Paragraph(ParagraphBase):
         return self._paragraph_id
 
     @property
-    def is_cached(self):
-        return not self._cache is None
-
-    @property
     def text(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' text from cache")
-            return self._cache["text"]
-
-        paragraph = self.get_info()
-        return paragraph["text"]
+        self.log.debug(f"get paragraph '{self.paragraph_id}' text from cache")
+        return self._cache["text"]
 
     @text.setter
     def text(self, value):
@@ -220,17 +340,12 @@ class Paragraph(ParagraphBase):
             raise TypeError("text value must be string")
 
         self.update(text=value)
-        if self.is_cached:
-            self._cache["text"] = value
+        self._cache["text"] = value
 
     @property
     def title(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' title from cache")
-            return self._cache["title"]
-
-        paragraph = self.get_info()
-        return paragraph.get("title", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' title from cache")
+        return self._cache["title"]
 
     @title.setter
     def title(self, value):
@@ -238,26 +353,17 @@ class Paragraph(ParagraphBase):
             raise TypeError("title value must be string")
 
         self.update(title=value)
-        if self.is_cached:
-            self._cache["title"] = value
+        self._cache["title"] = value
 
     @property
     def date_updated(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' date_updated from cache")
-            return self._cache["dateUpdated"]
-
-        paragraph = self.get_info()
-        return paragraph["dateUpdated"]
+        self.log.debug(f"get paragraph '{self.paragraph_id}' date_updated from cache")
+        return self._cache["dateUpdated"]
 
     @property
     def config(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' config from cache")
-            return self._cache["config"]
-
-        paragraph = self.get_info()
-        return paragraph.get("config", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' config from cache")
+        return self._cache["config"]
 
     @config.setter
     def config(self, value):
@@ -265,80 +371,47 @@ class Paragraph(ParagraphBase):
             raise TypeError("config value must be string")
         
         self.update(config=value)
-        if self.is_cached:
-            self._cache["config"] = value
+        self._cache["config"] = value
 
     @property
     def settings(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' settings from cache")
-            return self._cache["settings"]
-
-        paragraph = self.get_info()
-        return paragraph.get("settings", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' settings from cache")
+        return self._cache["settings"]
 
     @property
     def job_name(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' jobName from cache")
-            return self._cache["jobName"]
-
-        paragraph = self.get_info()
-        return paragraph.get("jobName", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' jobName from cache")
+        return self._cache["jobName"]
 
     @property
     def results(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' results from cache")
-            return self._cache["results"]
-
-        paragraph = self.get_info()
-        return paragraph.get("results", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' results from cache")
+        return self._cache["results"]
 
     @property
     def date_created(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' dateCreated from cache")
-            return self._cache["dateCreated"]
-
-        paragraph = self.get_info()
-        return paragraph.get("dateCreated", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' dateCreated from cache")
+        return self._cache["dateCreated"]
 
     @property
     def date_started(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' dateStarted from cache")
-            return self._cache["dateStarted"]
-
-        paragraph = self.get_info()
-        return paragraph.get("dateStarted", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' dateStarted from cache")
+        return self._cache["dateStarted"]
 
     @property
     def date_finished(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' dateFinished from cache")
-            return self._cache["dateFinished"]
-
-        paragraph = self.get_info()
-        return paragraph.get("dateFinished", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' dateFinished from cache")
+        return self._cache["dateFinished"]
 
     @property
     def status(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' status from cache")
-            return self._cache["status"]
-
-        paragraph = self.get_info()
-        return paragraph.get("status", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' status from cache")
+        return self._cache["status"]
     
     @property
     def progress_update_intervals(self):
-        if self.is_cached:
-            self.log.debug(f"get paragraph '{self.paragraph_id}' progressUpdateIntervalMs from cache")
-            return self._cache["status"]
-
-        paragraph = self.get_info()
-        return paragraph.get("progressUpdateIntervalMs", None)
+        self.log.debug(f"get paragraph '{self.paragraph_id}' progressUpdateIntervalMs from cache")
+        return self._cache["progressUpdateIntervalMs"]
 
     def get_info(self):
         self.log.info(f"getting '{self._paragraph_id}' info")
@@ -353,25 +426,15 @@ class Paragraph(ParagraphBase):
         return r_json["body"]
     
     def update_config(self, config: dict):
-        if not isinstance(config, dict):
-            err_msg = f"expect text as dict, got {type(config)}"
-            self.log.error(err_msg)
-            raise TypeError(err_msg)
-
         self.log.info(f"updating '{self._paragraph_id}' config with {config}")
-        self._update_config(config)
+        return self._update_config(config)
 
     def update_text(self, text: str, title: str = None):
-        if not isinstance(text, str):
-            err_msg = f"expect text as str, got {type(text)}"
-            self.log.error(err_msg)
-            raise TypeError(err_msg)
-
         self.log.info(f"updating '{self._paragraph_id}' text")
-        self._update_text(text, title=title)
+        return self._update_text(text, title=title)
 
     def update(self, **kwargs):
-        if not self.is_cached and len(kwargs) == 0:
+        if len(kwargs) == 0:
             self.log.warning("no argument to update, abort")
             return
 
@@ -387,14 +450,14 @@ class Paragraph(ParagraphBase):
         if "text" in kwargs:
             self.update_text(kwargs["text"], title=kwargs.get("title", None))
 
-    def drop(self):
-        res = self._drop()
-        r_json = res.json()
-        if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
+    def delete(self):
+        return self._delete()
 
-def build_note(note_name, paragraphs: list):
-    assert isinstance(paragraphs, list)
-    
+    def run(self, sync=True, option: dict = None):
+        return self._run(sync=sync, option=option)
+
+    def stop(self):
+        return self._stop()
+
+    def move_to_index(self, index: int):
+        return self._move_to_index(index)
