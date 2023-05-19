@@ -95,10 +95,10 @@ def handle_zeppelin_response(func):
         res = func(self, *args, **kwargs)
         r_json = res.json()
         if r_json["status"] != "OK":
-            err_msg = r_json.get("message", r_json)
-            self.log.error(err_msg)
-            raise RuntimeError(err_msg)
+            err_msg = r_json.get("message", str(r_json))
+            self.log.error(r_json["status"], err_msg)
+            raise RuntimeError(r_json["status"], err_msg)
 
-        return r_json
+        return r_json.get("body", r_json)
 
     return wrapper
