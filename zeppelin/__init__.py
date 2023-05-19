@@ -1,11 +1,11 @@
-import time
+import re
 import logging
 
 from .base import ZeppelinBase, NoteBase, ParagraphBase
 from .. import logger
-from ..settings import ZEPPELIN_INTERPRETER, ZEPPELIN_INACTIVE_TIME, ZEPPELIN_PARAGRAPH_CONFIG
+from ..settings import ZEPPELIN_INTERPRETER, ZEPPELIN_PARAGRAPH_CONFIG
 
-__all__ = ["Zeppelin", "build_paragraph"]
+__all__ = ["Zeppelin", "Note", "Paragraph"]
 
 
 class Zeppelin(ZeppelinBase):
@@ -32,8 +32,10 @@ class Zeppelin(ZeppelinBase):
         if verbose:
             logger.set_stream_log_level(self.log, verbose=verbose)
 
-        super(Zeppelin, self).__init__(username=username,
-            password=password, verbose=verbose)
+        super(Zeppelin, self).__init__(
+            username=username,
+            password=password,
+            verbose=verbose)
 
         if self.username is not None \
                 and password is not None:
@@ -41,7 +43,7 @@ class Zeppelin(ZeppelinBase):
 
     def _get_note_id_by_name(self, note_name: str):
         for note in self.list_notes():
-            if note["name"] == note_name:
+            if note["name"].strip("/") == note_name.strip().strip("/"):
                 return note["id"]
 
         msg = f"note name '{note_name}' does not exists"
@@ -60,7 +62,7 @@ class Zeppelin(ZeppelinBase):
     def list_notes(self):
         self.log.info("getting all notes")
         r_json = self._list_notes()
-        return r_json["body"]
+        return r_json
 
     def get_note(self, note_name: str = None, note_id: str = None):
         if note_name is None and note_id is None:
@@ -77,8 +79,8 @@ class Zeppelin(ZeppelinBase):
     def create_note(self, name: str, paragraphs: None):
         self.log.info("creating note")
         r_json = self._create_note(name, paragraphs)
-        assert isinstance(r_json["body"], str)
-        return Note(self, name, r_json["body"])
+        assert isinstance(r_json, str)
+        return Note(self, name, r_json)
 
     def delete_note(self, note_name: str = None, note_id: str = None):
         if note_name is None and note_id is None:
@@ -92,15 +94,40 @@ class Zeppelin(ZeppelinBase):
             note_id = self.get_note_id_by_name(note_name)
             self._delete_note(note_id)
 
-    def import_note(self, note: dict):
-        if not isinstance(note, dict) or "name" not in note:
-            raise TypeError("incorrect note format, please use build_note to create a note")
+    def import_note(self, note: dict, verbose=False):
+        if not isinstance(note, dict) \
+            or "paragraphs" not in note \
+            or "name" not in note:
+            raise TypeError("wrong note format given, please make sure to use Note.build_note")
 
-        self.log.info("importing note")
+        self.log.info(f"importing note[{self.name}]")
         r_json = self._import_note(note)
-        assert isinstance(r_json["body"], str)
-        return Note(self, note["name"], r_json["body"])
-        
+        return Note(self,
+            name=note["name"],
+            note_id=r_json,
+            verbose=verbose)
+
+    def import_py(self,
+        note_name: str,
+        path: str,
+        verbose=False,
+        config=ZEPPELIN_PARAGRAPH_CONFIG,
+        interpreter=ZEPPELIN_INTERPRETER,
+        **open_kwargs):
+
+        if "mode" in open_kwargs:
+            del open_kwargs["mode"]
+
+        with open(path, mode='r', **open_kwargs) as f:
+            text = f.readlines()
+
+        d_note = Note.build_note(
+            note_name=note_name,
+            text=text,
+            config=config,
+            interpreter=interpreter)
+        return self.import_note(note=d_note, verbose=verbose)
+
     def clone_note(self,
             new_note_name: str,
             note_name: str = None,
@@ -111,14 +138,14 @@ class Zeppelin(ZeppelinBase):
 
         self.log.info("cloning note")
         if note_id:
-            res = self._clone_note(note_id, new_note_name)
+            r_json = self._clone_note(note_id, new_note_name)
         else:
             # find note id w.r.t note name from list of all notes
             note_id = self.get_note_id_by_name(note_name=note_name)
             r_json = self._clone_note(note_id, new_note_name)
 
-        assert isinstance(r_json["body"], str)
-        return Note(self, new_note_name, r_json["body"])
+        assert isinstance(r_json, str)
+        return Note(self, new_note_name, r_json)
 
     def export_note(self,
             note_name: str = None,
@@ -128,21 +155,37 @@ class Zeppelin(ZeppelinBase):
         if note_name is None and note_id is None:
             raise ValueError("either name of original note or node id should be given")
     
-        self.log.info("exporting note " + note_name or note_id)
+        self.log.info(f"exporting note '{note_name or note_id}'")
         if note_id:
-            res = self._export_note(note_id=note_id)
+            r_json = self._export_note(note_id=note_id)
         else:
-            note_id = self.get_note_id_by_name(note_name=note_name)
-            res = self._export_note(note_id=note_id)
+            note_id = self._get_note_id_by_name(note_name=note_name)
+            r_json = self._export_note(note_id=note_id)
 
         if path:
             with open(path, mode="w", encoding="utf-8") as f:
-                f.writelines(res.text)
+                f.writelines(r_json)
         else:
-            return res.json()
+            return r_json
+
+    def export_py(self, 
+            note_name: str = None,
+            note_id: str = None,
+            path: str = None,
+            sep='\n'):
+
+        if note_name is None and note_id is None:
+            raise ValueError("either name of original note or node id should be given")
+
+        self.log.info(f"exporting note[{self.name}] to python file")
+        note = self.get_note(note_name=note_name, note_id=note_id)
+
+        return note.export_py(path=path, sep=sep)
 
 
 class Note(NoteBase):
+    _regex_text_sep = re.compile(r"[ \t\n]*#+(%[a-zA-Z0-9_\.]+[ \t]*\n+.*)")
+    
     def __init__(self,
                  zeppelin: Zeppelin,
                  name: str,
@@ -155,18 +198,37 @@ class Note(NoteBase):
             logger.set_stream_log_level(self.log, verbose=verbose)
 
         super().__init__(zeppelin, name, note_id)
+        self._regex_interpreters = re.compile(r"[ \t\n]*(%[a-zA-Z0-9_\.]+[ \t]*\n+)")
 
     @classmethod
-    def build_note(note_name: str, paragraphs: list):
+    def build_note(
+            note_name: str,
+            text: str = None,
+            paragraphs: list = None,
+            config: dict = ZEPPELIN_PARAGRAPH_CONFIG,
+            interpreter: str = ZEPPELIN_INTERPRETER
+            ):
         assert isinstance(note_name, str)
-        assert isinstance(paragraphs, list)
+        if text is None and paragraphs is None:
+            raise ValueError("either text or paragraphs should be provided")
+
+        assert isinstance(text, str) or isinstance(paragraphs, list)
+        if isinstance(paragraphs, list):
+            return {"name": note_name, "paragraphs": paragraphs}
+
+        lst_text = re.split(Note._regex_text_sep, text)
+        paragraphs = [
+            Paragraph.build_paragraph(text=t, config=config, interpreter=interpreter)
+            for t in lst_text
+            if len(t) > 0]
+
         return {"name": note_name, "paragraphs": paragraphs}
 
     @property
     def info(self):
         self.log.info(f"getting note[{self.name}] info")
         r_json = self._get_info()
-        return r_json["body"]
+        return r_json
 
     def run_all(self):
         self.log.info(f"running note[{self.name}]")
@@ -186,9 +248,9 @@ class Note(NoteBase):
     def get_all_status(self):
         self.log.info(f"getting all paragraph status in note[{self.name}]")
         r_json = self._get_all_status()
-        return r_json["body"]
+        return r_json
 
-    def delete_note(self):
+    def delete(self):
         self.log.info(f"deleting note[{self.name}]")
         r_json = self._delete_note()
         return r_json
@@ -198,40 +260,79 @@ class Note(NoteBase):
         r_json = self._clone_note(name=name)
         return Note(self.zeppelin,
             name=name,
-            note_id=r_json["body"],
+            note_id=r_json,
             verbose=verbose)
 
-    def export_note(self):
+    def export_note(self, path: str = None):
         self.log.info(f"exporting note[{self.name}]")
         r_json = self._export_note()
-        return r_json
+        if path:
+            with open(path, mode="w", encoding="utf-8") as f:
+                f.writelines(r_json)
+        else:
+            return r_json
+
+    def export_py(self, path: str = None, sep='\n'):
+        self.log.info(f"exporting note[{self.name}] to python file")
+        lst_text = [
+            re.sub(self._regex_interpreters, r"#\g<1>", p["text"])
+            for p in self.info["paragraphs"]]
+        text = sep.join(lst_text)
+        if path:
+            with open(path, mode="w", encoding="utf-8") as f:
+                f.writelines(text)
+        else:
+            return text
 
     def import_note(self, note: dict, verbose=False):
         if not isinstance(note, dict) \
             or "paragraphs" not in note \
             or "name" not in note:
-            raise TypeError("wrong note format given")
+            raise TypeError("wrong note format given, please make sure to use Note.build_note")
 
         self.log.info(f"importing note[{self.name}]")
         r_json = self._import_note(note)
-        return Note(self.zeppelin,
+        return Note(
+            self.zeppelin,
             name=note["name"],
-            note_id=r_json["body"],
+            note_id=r_json,
             verbose=verbose)
+
+    def import_py(self,
+        note_name: str,
+        path: str,
+        verbose=False,
+        config=ZEPPELIN_PARAGRAPH_CONFIG,
+        interpreter=ZEPPELIN_INTERPRETER,
+        **open_kwargs):
+
+        if "mode" in open_kwargs:
+            del open_kwargs["mode"]
+
+        with open(path, mode='r', **open_kwargs) as f:
+            text = f.readlines()
+
+        note = Note.build_note(
+            note_name=note_name,
+            text=text,
+            config=config,
+            interpreter=interpreter)
+        return self.import_note(note=note, verbose=verbose)
 
     def create_paragraph(self,
             text: str,
             title=None,
             index: int = -1,
-            config: dict = None,
+            config: dict = ZEPPELIN_PARAGRAPH_CONFIG,
             verbose: bool = False):
 
-        self.log.info(f"clearing all result in note[{self.name}]")
-        r_json = self._create_paragraph(text=text,
+        self.log.info(f"creating paragraph in note[{self.name}]")
+        r_json = self._create_paragraph(
+            text=text,
             title=title,
             index=index,
             config=config)
-        return Paragraph(self, paragraph_id=r_json["body"], verbose=verbose)
+        return Paragraph(self, paragraph_id=r_json, verbose=verbose)
 
     def get_paragraph_by_index(self, index: int, verbose=False):
         self.log.info(f"getting paragraph by index {index} from note[{self.name}]")
@@ -276,7 +377,6 @@ class Note(NoteBase):
         self.log.info(f"getting permission from note[{self.name}]")
         return self._get_permission()
 
-
     def set_permission(self,
             readers: list,
             owners: list,
@@ -284,7 +384,8 @@ class Note(NoteBase):
             writers: list):
 
         self.log.info(f"setting cron from note[{self.name}]")
-        return self._set_permission(readers=readers,
+        return self._set_permission(
+            readers=readers,
             owners=owners,
             runners=runners,
             writers=writers)
@@ -305,9 +406,16 @@ class Paragraph(ParagraphBase):
         super().__init__(note, paragraph_id)
 
         self._cache = info or self._get_info()
+        self._regex_interpreter = re.compile(r"%[a-zA-Z0-9_\.]+ *\n+")
+        re_grp = re.match(self._regex_interpreter, self._cache["text"])
+        if re_grp:
+            self.interpreter = re_grp.group(0)
+        else:
+            self.interpreter = ZEPPELIN_INTERPRETER
 
     @classmethod
-    def build_paragraph(text: str,
+    def build_paragraph(
+            text: str,
             title: None,
             config: ZEPPELIN_PARAGRAPH_CONFIG,
             interpreter: ZEPPELIN_INTERPRETER):
@@ -326,18 +434,21 @@ class Paragraph(ParagraphBase):
         return paragraph
 
     @property
-    def id(self):
+    def paragraph_id(self):
         return self._paragraph_id
 
     @property
     def text(self):
         self.log.debug(f"get paragraph '{self.paragraph_id}' text from cache")
-        return self._cache["text"]
+        return re.sub(self._regex_interpreter, '', self._cache["text"])
 
     @text.setter
     def text(self, value):
         if not isinstance(value, str):
             raise TypeError("text value must be string")
+
+        if self.interpreter and not re.match(self._regex_interpreter, value):
+            value = f"%{self.interpreter}\n{value}"
 
         self.update(text=value)
         self._cache["text"] = value
@@ -414,23 +525,22 @@ class Paragraph(ParagraphBase):
         return self._cache["progressUpdateIntervalMs"]
 
     def get_info(self):
-        self.log.info(f"getting '{self._paragraph_id}' info")
+        self.log.info(f"getting '{self.paragraph_id}' info")
         r_json = self._get_info()
-        self._cache = r_json["body"]
-        return r_json["body"]
+        self._cache = r_json
+        return r_json
 
     def get_status(self):
-        self.log.info(f"getting '{self._paragraph_id}' status")
+        self.log.info(f"getting '{self.paragraph_id}' status")
         r_json = self._get_status()
-        self._cache = r_json["body"]
-        return r_json["body"]
+        return r_json
     
     def update_config(self, config: dict):
-        self.log.info(f"updating '{self._paragraph_id}' config with {config}")
+        self.log.info(f"updating '{self.paragraph_id}' config with {config}")
         return self._update_config(config)
 
     def update_text(self, text: str, title: str = None):
-        self.log.info(f"updating '{self._paragraph_id}' text")
+        self.log.info(f"updating '{self.paragraph_id}' text")
         return self._update_text(text, title=title)
 
     def update(self, **kwargs):
