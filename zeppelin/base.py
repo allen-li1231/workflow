@@ -5,7 +5,7 @@ import requests
 
 from .. import logger
 from ..decorators import ensure_login, retry, handle_zeppelin_response
-from ..settings import ZEPPELIN_URL, ZEPPELIN_PARAGRAPH_CONFIG, ZEPPELIN_INACTIVE_TIME, PROGRESSBAR
+from ..settings import ZEPPELIN_URL, ZEPPELIN_INACTIVE_TIME, PROGRESSBAR
 
 
 class ZeppelinBase(requests.Session):
@@ -20,7 +20,7 @@ class ZeppelinBase(requests.Session):
         logger.set_stream_log_level(self.log, verbose=verbose)
 
         self.headers["User-Agent"] = \
-            "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36"
+            "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:99.0) Gecko/20100101 Firefox/99.0"
 
     @property
     def is_logged_in(self) -> bool:
@@ -43,7 +43,7 @@ class ZeppelinBase(requests.Session):
             self._password = input("")
 
         self.log.debug(f"logging in for user: [{self.username}]")
-        res = self._login()
+        res = self._login(username=self.username, password=self._password)
         if res.status_code != 200:
             self._password = None
             self.log.error('login failed for [%s] at %s'
@@ -51,12 +51,11 @@ class ZeppelinBase(requests.Session):
             raise ValueError('login failed for [%s] at %s'
                              % (self.username, self.base_url))
         else:
+            self._last_execute = time.perf_counter()
             self.log.info('login succeeful [%s] at %s'
                           % (self.username, self.base_url))
-
         return self
 
-    @handle_zeppelin_response
     @retry(__name__)
     def _login(self, username, password):
         url = self.base_url + "/api/login"
@@ -224,12 +223,14 @@ class NoteBase(requests.Session):
     @retry(__name__)
     def _create_paragraph(self, text: str, title=None, index: int = -1, config: dict = None):
         url = self.base_url + f"/api/notebook/{self.note_id}/paragraph"
-        payload = {"text": text, "config": config or ZEPPELIN_PARAGRAPH_CONFIG}
+        payload = {"text": text}
         # if index not given, add to last by default
         if index > -1:
             payload["index"] = index
         if title:
             payload["title"] = title
+        if config:
+            payload["config"] = config
 
         res = self.post(url, json=payload)
         return res
