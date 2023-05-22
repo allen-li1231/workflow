@@ -5,7 +5,7 @@ from .base import ZeppelinBase, NoteBase, ParagraphBase
 from .. import logger
 from ..settings import ZEPPELIN_INTERPRETER, ZEPPELIN_PARAGRAPH_CONFIG
 
-__all__ = ["Zeppelin", "Note", "Paragraph"]
+__all__ = ["Zeppelin"]
 
 
 class Zeppelin(ZeppelinBase):
@@ -100,7 +100,7 @@ class Zeppelin(ZeppelinBase):
             or "name" not in note:
             raise TypeError("wrong note format given, please make sure to use Note.build_note")
 
-        self.log.info(f"importing note[{self.name}]")
+        self.log.info(f"importing note[{note['name']}]")
         r_json = self._import_note(note)
         return Note(self,
             name=note["name"],
@@ -108,8 +108,8 @@ class Zeppelin(ZeppelinBase):
             verbose=verbose)
 
     def import_py(self,
-        note_name: str,
         path: str,
+        note_name: str,
         verbose=False,
         config=ZEPPELIN_PARAGRAPH_CONFIG,
         interpreter=ZEPPELIN_INTERPRETER,
@@ -119,7 +119,7 @@ class Zeppelin(ZeppelinBase):
             del open_kwargs["mode"]
 
         with open(path, mode='r', **open_kwargs) as f:
-            text = f.readlines()
+            text = f.read()
 
         d_note = Note.build_note(
             note_name=note_name,
@@ -184,8 +184,8 @@ class Zeppelin(ZeppelinBase):
 
 
 class Note(NoteBase):
-    _regex_text_sep = re.compile(r"[ \t\n]*#+(%[a-zA-Z0-9_\.]+[ \t]*\n+.*)")
-    
+    _regex_py_sep = re.compile(r"(?s)#+(%[\w\d_\.]+\s*\n+.*?)(?=#+%[\w\d_\.]+|\Z)")
+
     def __init__(self,
                  zeppelin: Zeppelin,
                  name: str,
@@ -198,16 +198,16 @@ class Note(NoteBase):
             logger.set_stream_log_level(self.log, verbose=verbose)
 
         super().__init__(zeppelin, name, note_id)
-        self._regex_interpreters = re.compile(r"[ \t\n]*(%[a-zA-Z0-9_\.]+[ \t]*\n+)")
+        self._regex_interpreters = re.compile(r"[ \t\n]*(%[\w\d_\.]+[ \t]*\n+)")
 
     @classmethod
-    def build_note(
+    def build_note(cls,
             note_name: str,
             text: str = None,
             paragraphs: list = None,
             config: dict = ZEPPELIN_PARAGRAPH_CONFIG,
-            interpreter: str = ZEPPELIN_INTERPRETER
-            ):
+            interpreter: str = ZEPPELIN_INTERPRETER):
+
         assert isinstance(note_name, str)
         if text is None and paragraphs is None:
             raise ValueError("either text or paragraphs should be provided")
@@ -215,8 +215,14 @@ class Note(NoteBase):
         assert isinstance(text, str) or isinstance(paragraphs, list)
         if isinstance(paragraphs, list):
             return {"name": note_name, "paragraphs": paragraphs}
+        
+        if len(text) == 0:
+            return {"name": note_name, "paragraphs": []}
 
-        lst_text = re.split(Note._regex_text_sep, text)
+        lst_text = re.findall(Note._regex_py_sep, text)
+        if len(lst_text) == 0:
+            lst_text = [text]
+
         paragraphs = [
             Paragraph.build_paragraph(text=t, config=config, interpreter=interpreter)
             for t in lst_text
@@ -299,8 +305,8 @@ class Note(NoteBase):
             verbose=verbose)
 
     def import_py(self,
-        note_name: str,
         path: str,
+        note_name: str,
         verbose=False,
         config=ZEPPELIN_PARAGRAPH_CONFIG,
         interpreter=ZEPPELIN_INTERPRETER,
@@ -310,7 +316,7 @@ class Note(NoteBase):
             del open_kwargs["mode"]
 
         with open(path, mode='r', **open_kwargs) as f:
-            text = f.readlines()
+            text = f.read()
 
         note = Note.build_note(
             note_name=note_name,
@@ -392,6 +398,8 @@ class Note(NoteBase):
 
 
 class Paragraph(ParagraphBase):
+    _regex_interpreter = re.compile(r"[\s\n]*(%[a-zA-Z0-9_\.]+)\s*\n+")
+
     def __init__(self,
             note: Note,
             paragraph_id: str,
@@ -406,19 +414,18 @@ class Paragraph(ParagraphBase):
         super().__init__(note, paragraph_id)
 
         self._cache = info or self._get_info()
-        self._regex_interpreter = re.compile(r"%[a-zA-Z0-9_\.]+ *\n+")
-        re_grp = re.match(self._regex_interpreter, self._cache["text"])
+        re_grp = re.match(Paragraph._regex_interpreter, self._cache["text"])
         if re_grp:
-            self.interpreter = re_grp.group(0)
+            self.interpreter = re_grp.group(1)
         else:
             self.interpreter = ZEPPELIN_INTERPRETER
 
     @classmethod
-    def build_paragraph(
+    def build_paragraph(cls,
             text: str,
-            title: None,
-            config: ZEPPELIN_PARAGRAPH_CONFIG,
-            interpreter: ZEPPELIN_INTERPRETER):
+            title: str = None,
+            config: dict = ZEPPELIN_PARAGRAPH_CONFIG,
+            interpreter: str = ZEPPELIN_INTERPRETER):
 
         paragraph = {}
         if title:
@@ -427,10 +434,11 @@ class Paragraph(ParagraphBase):
         if config:
             paragraph["config"] = config
 
-        if interpreter:
-            text = f"%{interpreter}\n" + text
+        if interpreter \
+            and re.search(Paragraph._regex_interpreter, text) is None:
+            text = f"%{interpreter}\n{text}"
 
-        paragraph = {"text": text}
+        paragraph["text"] = text
         return paragraph
 
     @property

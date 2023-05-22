@@ -89,9 +89,9 @@ class ZeppelinBase(requests.Session):
     @handle_zeppelin_response
     @ensure_login
     @retry(__name__)
-    def _import_note(self, note_json):
-        url = self.base_url + f"/api/notebook/{self.note_id}"
-        res = self.post(url, json=note_json)
+    def _import_note(self, note):
+        url = self.base_url + "/api/notebook/import"
+        res = self.post(url, json=note)
         return res
 
     @handle_zeppelin_response
@@ -190,7 +190,7 @@ class NoteBase(requests.Session):
     @ensure_login
     @retry(__name__)
     def _import_note(self, note: dict):
-        url = self.base_url + f"/api/notebook/import"
+        url = self.base_url + "/api/notebook/import"
         res = self.post(url, json=note)
         return res
 
