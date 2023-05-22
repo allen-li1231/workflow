@@ -184,7 +184,7 @@ class Zeppelin(ZeppelinBase):
 
 
 class Note(NoteBase):
-    _regex_py_sep = re.compile(r"(?s)#+(%[\w\d_\.]+\s*\n+.*?)(?=\n#+%[\w\d_\.]+|\Z)")
+    _regex_py_sep = re.compile(r"(?s)#+(%[\w\d_\.]+\s*\n+.*?)(?=\n\s*#+%[\w\d_\.]+|\Z)")
 
     def __init__(self,
                  zeppelin: Zeppelin,
