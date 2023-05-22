@@ -184,7 +184,7 @@ class Zeppelin(ZeppelinBase):
 
 
 class Note(NoteBase):
-    _regex_py_sep = re.compile(r"(?s)#+(%[\w\d_\.]+\s*\n+.*?)(?=#+%[\w\d_\.]+|\Z)")
+    _regex_py_sep = re.compile(r"(?s)#+(%[\w\d_\.]+\s*\n+.*?)(?=\n#+%[\w\d_\.]+|\Z)")
 
     def __init__(self,
                  zeppelin: Zeppelin,
@@ -198,7 +198,7 @@ class Note(NoteBase):
             logger.set_stream_log_level(self.log, verbose=verbose)
 
         super().__init__(zeppelin, name, note_id)
-        self._regex_interpreters = re.compile(r"[ \t\n]*(%[\w\d_\.]+[ \t]*\n+)")
+        self._regex_interpreters = re.compile(r"[\s\n]*(%[\w\d_\.]+\s*\n+)")
 
     @classmethod
     def build_note(cls,
