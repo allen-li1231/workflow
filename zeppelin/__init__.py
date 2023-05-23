@@ -1,3 +1,4 @@
+import os
 import re
 import logging
 
@@ -7,6 +8,7 @@ from ..settings import ZEPPELIN_INTERPRETER, ZEPPELIN_PARAGRAPH_CONFIG
 
 __all__ = ["Zeppelin"]
 
+# Zeppelin Module User-friendly
 
 class Zeppelin(ZeppelinBase):
     """
@@ -65,6 +67,18 @@ class Zeppelin(ZeppelinBase):
         return r_json
 
     def get_note(self, note_name: str = None, note_id: str = None):
+        """
+        get an instance of note given either note name or note id
+        note that it is allowed in Zeppelin that note names are duplicated
+        in this case the returned note is the one with the oldest create time
+
+        Parameters:
+        note_name: str, default None
+            prepend path if the note is located in directory
+        note_id: str, default None
+            id of note as you can find in the respective url
+        """
+
         if note_name is None and note_id is None:
             raise ValueError("either name of note or node id should be given")
 
@@ -76,13 +90,31 @@ class Zeppelin(ZeppelinBase):
         
         return Note(self, name=note_name, note_id=note_id)
 
-    def create_note(self, name: str, paragraphs: None):
+    def create_note(self, name: str, paragraphs: list = None):
+        """
+        create a note with name and optional paragraphs specified
+
+        Parameters:
+        name: str, name of new note, prepend directory path if needed
+        paragraphs: list, default None, a list of paragraphs in dict type
+        """
+
         self.log.info("creating note")
         r_json = self._create_note(name, paragraphs)
         assert isinstance(r_json, str)
         return Note(self, name, r_json)
 
     def delete_note(self, note_name: str = None, note_id: str = None):
+        """
+        delete a note from Zeppelin given either name or note id
+
+        Parameters:
+        note_name: str, default None
+            prepend path if the note is located in directory
+        note_id: str, default None
+            id of note as you can find in the respective url
+        """
+
         if note_name is None and note_id is None:
             raise ValueError("either name of note or node id should be given")
 
@@ -95,6 +127,17 @@ class Zeppelin(ZeppelinBase):
             self._delete_note(note_id)
 
     def import_note(self, note: dict, verbose=False):
+        """
+        import a note in dict type to Zeppelin
+        this api might need further development
+
+        Parameters:
+        note: dict
+            note information in dict type, refer to official doc for api detail
+        verbose: bool, default False
+            whether returned instance of new note prints info log
+        """
+
         if not isinstance(note, dict) \
             or "paragraphs" not in note \
             or "name" not in note:
@@ -108,22 +151,39 @@ class Zeppelin(ZeppelinBase):
             verbose=verbose)
 
     def import_py(self,
-        path: str,
+        data: str,
         note_name: str,
         verbose=False,
         config=ZEPPELIN_PARAGRAPH_CONFIG,
         interpreter=ZEPPELIN_INTERPRETER,
         **open_kwargs):
+        """
+        import python file or python code string to Zeppelin as a new note
 
-        if "mode" in open_kwargs:
-            del open_kwargs["mode"]
+        Parameters:
+        data: str
+            python file path with suffix '.py', or raw string of python code
+        note_name: str
+            the corresponding note name, prepend note path before name if needed
+        verbose: bool, default False
+            whether returned instance of new note prints info log
+        config: dict, default ZEPPELIN_PARAGRAPH_CONFIG
+            paragragh configuration, see the official doc if you want to modify
+        interpreter: dict, default ZEPPELIN_INTERPRETER
+            name of interpreter, refer to settings.py to make change of default value
+        """
 
-        with open(path, mode='r', **open_kwargs) as f:
-            text = f.read()
+        assert isinstance(data, str)
+
+        if os.path.isfile(data) and data.endswith(".py"):
+            if "mode" in open_kwargs:
+                del open_kwargs["mode"]
+            with open(data, mode='r', **open_kwargs) as f:
+                data = f.read()
 
         d_note = Note.build_note(
             note_name=note_name,
-            text=text,
+            text=data,
             config=config,
             interpreter=interpreter)
         return self.import_note(note=d_note, verbose=verbose)
@@ -131,7 +191,21 @@ class Zeppelin(ZeppelinBase):
     def clone_note(self,
             new_note_name: str,
             note_name: str = None,
-            note_id: str = None):
+            note_id: str = None,
+            verbose: bool = False):
+        """
+        make a copy of Zeppelin note with a new name
+
+        Parameters:
+        new_note_name: str
+            name of new note, prepend note path before name if needed
+        note_name: str
+            note name to copy from, prepend note path if located in directory
+        note_id: str, default None
+            id of note as you can find in the respective url
+        verbose: bool, default False
+            whether returned instance of new note prints info log
+        """
 
         if note_name is None and note_id is None:
             raise ValueError("either name of original note or node id should be given")
@@ -145,16 +219,31 @@ class Zeppelin(ZeppelinBase):
             r_json = self._clone_note(note_id, new_note_name)
 
         assert isinstance(r_json, str)
-        return Note(self, new_note_name, r_json)
+        return Note(self, name=new_note_name, note_id=r_json, verbose=verbose)
 
     def export_note(self,
             note_name: str = None,
             note_id: str = None,
             path: str = None):
+        """
+        export note from Zeppelin into json format given either note name or id
+        return string of json by default, if path given, save to file instead
+
+        Parameters:
+        note_name: str
+            note name to export, prepend note path if located in directory
+        note_id: str, default None
+            id of note as you can find in the respective url
+        path: str, default None
+            file path
+        """
 
         if note_name is None and note_id is None:
             raise ValueError("either name of original note or node id should be given")
     
+        if isinstance(path, str) and not os.path.exists(os.path.dirname(path)):
+            raise NotADirectoryError("the specified path of file does not exist")
+
         self.log.info(f"exporting note '{note_name or note_id}'")
         if note_id:
             r_json = self._export_note(note_id=note_id)
@@ -173,6 +262,20 @@ class Zeppelin(ZeppelinBase):
             note_id: str = None,
             path: str = None,
             sep='\n'):
+        """
+        export note from Zeppelin into python format given either note name or id
+        return string of json by default, if path given, save to file instead
+
+        Parameters:
+        note_name: str
+            note name to export, prepend note path if located in directory
+        note_id: str, default None
+            id of note as you can find in the respective url
+        path: str, default None
+            file path
+        sep: str, default '\n'
+            the symbol to concat each paragraph context with
+        """
 
         if note_name is None and note_id is None:
             raise ValueError("either name of original note or node id should be given")
@@ -191,6 +294,15 @@ class Note(NoteBase):
                  name: str,
                  note_id: str,
                  verbose: bool = False):
+        """
+        Zeppelin Note API
+
+        Parameters:
+        zeppelin: Zeppelin
+            Zeppelin instance, in order for many methods to work and interact with
+        name: str, name of note
+        note_id: str, note id as you can find in url
+        """
 
         self.verbose = verbose
         self.log = logging.getLogger(__name__ + f".Note")
@@ -207,6 +319,23 @@ class Note(NoteBase):
             paragraphs: list = None,
             config: dict = ZEPPELIN_PARAGRAPH_CONFIG,
             interpreter: str = ZEPPELIN_INTERPRETER):
+        """
+        build note from scratch
+        use this to build correct note format along with Paragraph.build_paragraph
+
+        Parameters:
+        note_name: str
+            note name to export, prepend note path if located in directory
+        text: str, default None
+            if provided, will parse and split it into paragraphs
+            based on interpreter hints in text
+        paragraphs: list, default None
+            list of paragraphs of dict type built from Paragraph.build_paragraph
+        config: dict, default ZEPPELIN_PARAGRAPH_CONFIG
+            paragragh configuration, see the official doc if you want to modify
+        interpreter: dict, default ZEPPELIN_INTERPRETER
+            name of interpreter, refer to settings.py to make change of default value
+        """
 
         assert isinstance(note_name, str)
         if text is None and paragraphs is None:
@@ -237,31 +366,45 @@ class Note(NoteBase):
         return r_json
 
     def run_all(self):
+        # run all codes in note's paragraphs
         self.log.info(f"running note[{self.name}]")
         r_json = self._run_all()
         return r_json
 
     def stop_all(self):
+        # stop all codes in note's paragraphs
         self.log.info(f"stoping note[{self.name}]")
         r_json = self._stop_all()
         return r_json
 
     def clear_all_result(self):
+        # clear all results from note's paragraphs
         self.log.info(f"clearing all result in note[{self.name}]")
         r_json = self._clear_all_result()
         return r_json
     
     def get_all_status(self):
+        # get all status from note's paragraphs
         self.log.info(f"getting all paragraph status in note[{self.name}]")
         r_json = self._get_all_status()
         return r_json
 
     def delete(self):
+        # delete the entire note
         self.log.info(f"deleting note[{self.name}]")
         r_json = self._delete_note()
         return r_json
 
     def clone(self, name: str, verbose=False):
+        """
+        make a copy of current note with a new name
+
+        Parameters:
+        name: str, name of new note, prepend note path before name if needed
+        verbose: bool, default False
+            whether the returned instance of new note prints info log
+        """
+
         self.log.info(f"cloning note[{self.name}]")
         r_json = self._clone_note(name=name)
         return Note(self.zeppelin,
@@ -270,6 +413,15 @@ class Note(NoteBase):
             verbose=verbose)
 
     def export_note(self, path: str = None):
+        """
+        export the current note in json format
+        return string of json by default, if path given, save to file instead
+
+        Parameters:
+        path: str, default None
+            file path
+        """
+
         self.log.info(f"exporting note[{self.name}]")
         r_json = self._export_note()
         if path:
@@ -279,6 +431,19 @@ class Note(NoteBase):
             return r_json
 
     def export_py(self, path: str = None, sep='\n'):
+        """
+        export current note from Zeppelin into python format
+
+        Parameters:
+        path: str, default None
+            file path
+        sep: str, default '\n'
+            the symbol to concat each paragraph context with
+
+        Returns:
+            string of json by default, if path given, save to file instead
+        """
+
         self.log.info(f"exporting note[{self.name}] to python file")
         lst_text = [
             re.sub(self._regex_interpreters, r"#\g<1>", p["text"])
@@ -291,6 +456,20 @@ class Note(NoteBase):
             return text
 
     def import_note(self, note: dict, verbose=False):
+        """
+        import a note in dict type to Zeppelin
+        this api might need further development
+
+        Parameters:
+        note: dict
+            note information in dict type, refer to official doc for api detail
+        verbose: bool, default False
+            whether returned instance of new note prints info log
+
+        Returns:
+            Note: the new Note instance parsed from note dict
+        """
+
         if not isinstance(note, dict) \
             or "paragraphs" not in note \
             or "name" not in note:
@@ -311,6 +490,24 @@ class Note(NoteBase):
         config=ZEPPELIN_PARAGRAPH_CONFIG,
         interpreter=ZEPPELIN_INTERPRETER,
         **open_kwargs):
+        """
+        import python file or python code string to Zeppelin as a new note
+
+        Parameters:
+        data: str
+            python file path with suffix '.py', or raw string of python code
+        note_name: str
+            the corresponding note name, prepend note path before name if needed
+        verbose: bool, default False
+            whether returned instance of new note prints info log
+        config: dict, default ZEPPELIN_PARAGRAPH_CONFIG
+            paragragh configuration, see the official doc if you want to modify
+        interpreter: dict, default ZEPPELIN_INTERPRETER
+            name of interpreter, refer to settings.py to make change of default value
+
+        Returns:
+            Note: the new Note instance parsed from py file/string
+        """
 
         if "mode" in open_kwargs:
             del open_kwargs["mode"]
@@ -330,9 +527,32 @@ class Note(NoteBase):
             title=None,
             index: int = -1,
             config: dict = ZEPPELIN_PARAGRAPH_CONFIG,
+            interpreter: str = ZEPPELIN_INTERPRETER,
             verbose: bool = False):
+        """
+        create a new paragraph in current note
+
+        Parameters:
+        text: str
+            paragraph context to create with
+        title: str, default None
+            title of paragraph, leave it blank by default
+        config: dict, default ZEPPELIN_PARAGRAPH_CONFIG
+            paragragh configuration, see the official doc if you want to modify
+        interpreter: dict, default ZEPPELIN_INTERPRETER
+            name of interpreter, refer to settings.py to make change of default value
+        verbose: bool, default False
+        whether to print log on stdout, default to False
+
+        Returns:
+            Paragraph: the new paragraph instance
+        """
 
         self.log.info(f"creating paragraph in note[{self.name}]")
+        if interpreter \
+            and re.search(Paragraph._regex_interpreter, text) is None:
+            text = f"%{interpreter}\n{text}"
+
         r_json = self._create_paragraph(
             text=text,
             title=title,
@@ -341,11 +561,37 @@ class Note(NoteBase):
         return Paragraph(self, paragraph_id=r_json, verbose=verbose)
 
     def get_paragraph_by_index(self, index: int, verbose=False):
+        """
+        get specific paragraph by the order (index+1)
+
+        Parameters:
+        index: int
+            paragraph index, starting from 0. 
+        verbose: bool, default False
+            whether to print log on stdout, default to False
+        
+        Returns:
+            Paragraph: the paragraph instance according to index
+        """
+
         self.log.info(f"getting paragraph by index {index} from note[{self.name}]")
         paragraph = self.info["paragraphs"][index]
         return Paragraph(self, paragraph_id=paragraph["id"], verbose=verbose)
 
     def get_paragraph_by_id(self, id_: str, verbose=False):
+        """
+        get specific paragraph by its id
+
+        Parameters:
+        id_: int
+            paragraph id_, usually not visible for user, do not use if you don't know this
+        verbose: bool, default False
+            whether the returned paragraph prints log on stdout, default to False
+
+        Returns:
+            Paragraph: the paragraph instance according to id
+        """
+
         self.log.info(f"getting paragraph by id {id_} from note[{self.name}]")
         paragraphs = self.info["paragraphs"]
         for p in paragraphs:
@@ -406,6 +652,16 @@ class Paragraph(ParagraphBase):
             verbose: bool = False,
             info: dict = None):
 
+        """
+        Zeppelin Note Paragraph API
+
+        Parameters:
+        note: Zeppelin note
+            Note instance, in order for many methods to work and interact with
+        name: str, name of note
+        paragraph_id: str, paragraph id 
+        """
+
         self.verbose = verbose
         self.log = logging.getLogger(__name__ + f".Paragraph")
         if verbose:
@@ -426,6 +682,21 @@ class Paragraph(ParagraphBase):
             title: str = None,
             config: dict = ZEPPELIN_PARAGRAPH_CONFIG,
             interpreter: str = ZEPPELIN_INTERPRETER):
+        """
+        build paragraph from scratch
+        use this to build correct paragraph format along with Note.build_note
+
+        Parameters:
+        text: str
+            the context of paragraph, will automatically add interpreter hint
+            if the context doesn't contain one
+        title: str, default None
+            title of 
+        config: dict, default ZEPPELIN_PARAGRAPH_CONFIG
+            paragragh configuration, see the official doc if you want to modify
+        interpreter: dict, default ZEPPELIN_INTERPRETER
+            name of interpreter, refer to settings.py to make change of default value
+        """
 
         paragraph = {}
         if title:
