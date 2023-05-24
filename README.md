@@ -1,14 +1,14 @@
 # 风控部工具包
-### 包含以下模块:
+## 包含以下模块:
 
-- 使用hue notebook api实现的hive sql运行、query状态跟踪和数据拉取等功能
-- hue下载系统的上传下载接口的调用
-- 使用jupyter api实现的上传和下载jupyter远端文件
+- 使用[hue notebook api](#使用huenotebook调用hue-notebook-api)实现的hive sql运行、query状态跟踪和数据拉取等功能
+- [hue下载系统](#使用上传下载功能)的上传下载接口的调用
+- 使用[jupyter api](#使用jupyter模块)实现的上传和下载jupyter远端文件
 - 结合远端服务器命令行实现的jupyter kernel内存使用情况和变量内存占用的可视化
-- 通过Zeppelin api实现的各种平和note内容台控制
+- 通过[Zeppelin api](#使用zeppelin模块)实现的各种平台和note内容控制
 
 
-## 使用hue模块运行sql，拉取结果，进行上传下载
+## 使用hue模块运行sql，拉取结果
 ``` python
 import workflow
 import pandas as pd
@@ -20,18 +20,16 @@ HUE = workflow.hue("USERNAME", "PASSWORD")
 HUE = workflow.hue("USERNAME")
 
 result = HUE.run_sql("select 1;)
-
-# 直接拉取
-data = result.fetchall()
-
-# 或使用下载平台
+### 交互Pandas API
+df = pd.DataFrame(**result.fetchall())
+df.head()
+```
+## 使用上传下载功能
+``` python
+# 使用下载平台
 data = HUE.download(table_name="TABLE_NAME",
                     reason="YOUR_REASON",
                     decrypt_columns=COL_TO_DECODE)
-
-# 使用Pandas API
-df = pd.DataFrame(**data)
-df.head()
 
 # 或直接保存csv到本地
 result = HUE.run_sql("select 1;")
@@ -190,7 +188,7 @@ j.close_terminal(terminal_name)
 ```
 ___
 
-## 使用Zeppelin
+## 使用Zeppelin模块
 ``` python
 from workflow.zeppelin import Zeppelin
 
