@@ -2,7 +2,7 @@
 ## 包含以下模块:
 
 - 使用[hue notebook api](#使用huenotebook调用hue-notebook-api)实现的hive sql运行、query状态跟踪和数据拉取等功能
-- [hue下载系统](#使用上传下载功能)的上传下载接口的调用
+- 对[hue下载系统](#使用上传下载功能)的上传下载接口的调用
 - 使用[jupyter api](#使用jupyter模块)实现的上传和下载jupyter远端文件
 - 结合远端服务器命令行实现的jupyter kernel内存使用情况和变量内存占用的可视化
 - 通过[Zeppelin api](#使用zeppelin模块)实现的各种平台和note内容控制
@@ -19,7 +19,7 @@ HUE = workflow.hue("USERNAME", "PASSWORD")
 # 仅提供username，会在程序运行的shell提示输入密码（推荐）
 HUE = workflow.hue("USERNAME")
 
-result = HUE.run_sql("select 1;)
+result = HUE.run_sql("select 1;")
 ### 交互Pandas API
 df = pd.DataFrame(**result.fetchall())
 df.head()
@@ -274,4 +274,4 @@ print(p.date_finished)
 # 删除paragraph
 p.delete()
 ```
-> 更多功能请查阅zeppelin.\__init__
+> 更多功能请查阅[zeppelin.\__init__](zeppelin/__init__.py)
