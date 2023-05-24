@@ -8,8 +8,7 @@ def ensure_login(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         if not self.is_logged_in:
-            logger = logging.getLogger(func.__name__)
-            logger.warning(f"notebook not logged in while calling {func.__name__}")
+            self.log.warning(f"not logged in while calling {func.__name__}")
             self.login()
 
         res = func(self, *args, **kwargs)
@@ -20,6 +19,7 @@ def ensure_login(func):
                 and res._content_consumed \
                 and ("/* login required */" in res.text
                     or '"error":"Unauthorized"' in res.text
+                    or 'METHOD_NOT_ALLOWED' in res.text
                 ):
             self.login()
             return func(self, *args, **kwargs)
@@ -87,3 +87,18 @@ def retry(module='', attempts: int = 3, wait_sec: int = 3):
         return wrapper
 
     return retry_wrapper
+
+
+def handle_zeppelin_response(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        res = func(self, *args, **kwargs)
+        r_json = res.json()
+        if r_json["status"] != "OK":
+            err_msg = r_json.get("message", str(r_json))
+            self.log.error(r_json["status"], err_msg)
+            raise RuntimeError(r_json["status"], err_msg)
+
+        return r_json.get("body", r_json)
+
+    return wrapper

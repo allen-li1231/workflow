@@ -9,6 +9,10 @@ MAX_LEN_PRINT_SQL = 100
 
 HUE_INACTIVE_TIME = 1800
 
+HUE_MAX_CONCURRENT_SQL = 4
+
+HUE_DOWNLOAD_LARGE_TABLE_ROWS = 100000
+
 TEZ_SESSION_TIMEOUT_SECS = 300
 
 HIVE_PERFORMANCE_SETTINGS = {
@@ -121,3 +125,22 @@ JUMP_SERVER_PORT = 22
 JUMP_SERVER_BACKEND_HOST = "10.18.22.95"
 JUMP_SERVER_PLSQL_HOST = "10.19.1.2"
 JUMP_SERVER_PLSQL_SERVICE_NAME = "srcndb"
+
+
+# zeppelin
+ZEPPELIN_URL = "http://10.19.166.33:8080"
+ZEPPELIN_INTERPRETER = "zf_fk_spark.pyspark"
+ZEPPELIN_INACTIVE_TIME = 3600.
+ZEPPELIN_PARAGRAPH_CONFIG = {
+    'editorSetting': {
+        'language': 'python',
+        'editOnDblClick': False,
+        'completionSupport': True,
+        'completionKey': 'TAB'
+    },
+    'colWidth': 12.0,
+    'editorMode': 'ace/mode/python',
+    'fontSize': 9.0,
+    'results': {},
+    'enabled': True
+}
