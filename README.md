@@ -5,6 +5,7 @@
 - hue下载系统的上传下载接口的调用
 - 使用jupyter api实现的上传和下载jupyter远端文件
 - 结合远端服务器命令行实现的jupyter kernel内存使用情况和变量内存占用的可视化
+- 通过Zeppelin api实现的各种平和note内容台控制
 
 
 ## 使用hue模块运行sql，拉取结果，进行上传下载
@@ -155,7 +156,7 @@ while not all(is_ready for is_ready in d_notebook.values()):
 
     time.sleep(5)
 ```
-
+___
 
 ## 使用Jupyter模块
 ``` python
@@ -187,3 +188,92 @@ conn.execute("ls -l")
 # 关闭terminal
 j.close_terminal(terminal_name)
 ```
+___
+
+## 使用Zeppelin
+``` python
+from workflow.zeppelin import Zeppelin
+
+
+### Zeppelin
+z = Zeppelin(USERNAME, PASSWORD)
+# 获得note列表
+print(z.list_notes())
+
+# 获得note实例
+note = z.get_note("note_path/note_name")
+# 删除note
+z.delete_note("note_path/note_name")
+
+```
+### 使用Note
+``` python
+# 保存为python脚本
+note.export_py("python_script_path")
+
+# 导入python脚本, 并上传至Zeppelin
+# 会自动识别comment中的interpreter, 并按此分割paragraphs
+new_note = z.import_py(
+    data="python file path (ends with .py) or python code string",
+    note_name="path/new_note_name"
+    # 默认 interpreter为zf_fk_spark.pyspark, 选填
+    interpreter="zf_fk_spark.pyspark"
+)
+
+# 运行整个note
+note.run_all()
+# 停止运行
+note.stop_all()
+# 获取note跑批任务状态
+result = note.get_all_status()
+# 清除返回结果
+note.clear_all_results()
+# 设置note权限, 默认所有人
+note.set_permission(
+    readers=["your_username"],
+    owners=["your_username"],
+    runners=["your_username"],
+    writers=["your_username"]
+)
+# 删除note
+note.delete()
+```
+
+### 使用Paragraph
+``` python
+# 获取某个paragraph
+p = note.get_paragraph_by_index(6)
+# 遍历paragraphs
+for p in note.iter_paragraphs():
+    print(p.text)
+# 获取所有paragraphs实例
+lst_paragraph = note.get_all_paragraphs()
+# 创建新的paragraph
+# 默认在最后创建，可设置index, 0为开头, -1为最后
+p = note.create_paragraph("CONTEXT", index=0)
+
+
+# 获取文本
+print(p.text)
+# 修改文本
+p.text = "import pandas as pd"
+# 移动到某个index
+p.move_to_index(0)
+
+# 运行代码
+p.run()
+# 停止运行
+p.stop()
+# 运行状态
+print(p.status)
+# 运行结果
+print(p.results)
+# 获取job nme
+print(p.job_name)
+# 获取完成时间
+print(p.date_finished)
+
+# 删除paragraph
+p.delete()
+```
+> 更多功能请查阅zeppelin.\__init__

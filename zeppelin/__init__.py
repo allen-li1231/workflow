@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import logging
 
 from .base import ZeppelinBase, NoteBase, ParagraphBase
@@ -560,6 +561,15 @@ class Note(NoteBase):
             config=config)
         return Paragraph(self, paragraph_id=r_json, verbose=verbose)
 
+    def get_all_paragraphs(self, verbose: bool = False,  wait_sec: int = 0.1):
+        lst_paragraph = []
+        for p in self.iter_paragraphs():
+            paragraph = Paragraph(self, paragraph_id=p["id"], verbose=verbose)
+            lst_paragraph.append(paragraph)
+            time.sleep(wait_sec)
+
+        return lst_paragraph
+
     def get_paragraph_by_index(self, index: int, verbose=False):
         """
         get specific paragraph by the order (index+1)
@@ -613,6 +623,10 @@ class Note(NoteBase):
         self.log.warning(msg)
         raise IndexError(msg)
 
+    def iter_paragraphs(self, verbose=False):
+        for p in self.info.get("paragraphs", []):
+            yield Paragraph(self, paragraph_id=p["id"], verbose=verbose)
+
     def add_cron(self, cron: str, release_resource=False):
         self.log.info(f"adding cron '{cron}' to note[{self.name}]")
         return self._add_cron(cron=cron, release_resource=release_resource)
@@ -649,8 +663,7 @@ class Paragraph(ParagraphBase):
     def __init__(self,
             note: Note,
             paragraph_id: str,
-            verbose: bool = False,
-            info: dict = None):
+            verbose: bool = False):
 
         """
         Zeppelin Note Paragraph API
@@ -669,12 +682,8 @@ class Paragraph(ParagraphBase):
 
         super().__init__(note, paragraph_id)
 
-        self._cache = info or self._get_info()
-        re_grp = re.match(Paragraph._regex_interpreter, self._cache["text"])
-        if re_grp:
-            self.interpreter = re_grp.group(1)
-        else:
-            self.interpreter = ZEPPELIN_INTERPRETER
+        self._outdated = True
+        self.__cache = None
 
     @classmethod
     def build_paragraph(cls,
@@ -713,6 +722,20 @@ class Paragraph(ParagraphBase):
         return paragraph
 
     @property
+    def _cache(self):
+        if self._outdated:
+            self.log.debug(f"get paragraph '{self.paragraph_id}' cache")
+            self.__cache = self._get_info()
+
+        self._outdated = False
+        return self.__cache
+
+    @property
+    def interpreter(self):
+        re_grp = re.match(Paragraph._regex_interpreter, self._cache["text"])
+        return re_grp.group(1) if re_grp else ZEPPELIN_INTERPRETER
+
+    @property
     def paragraph_id(self):
         return self._paragraph_id
 
@@ -730,7 +753,7 @@ class Paragraph(ParagraphBase):
             value = f"%{self.interpreter}\n{value}"
 
         self.update(text=value)
-        self._cache["text"] = value
+        self._outdated = True
 
     @property
     def title(self):
@@ -743,7 +766,7 @@ class Paragraph(ParagraphBase):
             raise TypeError("title value must be string")
 
         self.update(title=value)
-        self._cache["title"] = value
+        self._outdated = True
 
     @property
     def date_updated(self):
@@ -759,9 +782,9 @@ class Paragraph(ParagraphBase):
     def config(self, value):
         if not isinstance(value, str):
             raise TypeError("config value must be string")
-        
+
         self.update(config=value)
-        self._cache["config"] = value
+        self._outdated = True
 
     @property
     def settings(self):
@@ -806,7 +829,7 @@ class Paragraph(ParagraphBase):
     def get_info(self):
         self.log.info(f"getting '{self.paragraph_id}' info")
         r_json = self._get_info()
-        self._cache = r_json
+        self.__cache = r_json
         return r_json
 
     def get_status(self):
@@ -816,11 +839,15 @@ class Paragraph(ParagraphBase):
     
     def update_config(self, config: dict):
         self.log.info(f"updating '{self.paragraph_id}' config with {config}")
-        return self._update_config(config)
+        r_json = self._update_config(config)
+        self._outdated = True
+        return r_json
 
     def update_text(self, text: str, title: str = None):
         self.log.info(f"updating '{self.paragraph_id}' text")
-        return self._update_text(text, title=title)
+        r_json = self._update_text(text, title=title)
+        self._outdated = True
+        return r_json
 
     def update(self, **kwargs):
         if len(kwargs) == 0:
@@ -839,14 +866,20 @@ class Paragraph(ParagraphBase):
         if "text" in kwargs:
             self.update_text(kwargs["text"], title=kwargs.get("title", None))
 
+        self._outdated = True
+
     def delete(self):
+        self._outdated = True
         return self._delete()
 
     def run(self, sync=True, option: dict = None):
+        self._outdated = True
         return self._run(sync=sync, option=option)
 
     def stop(self):
+        self._outdated = True
         return self._stop()
 
     def move_to_index(self, index: int):
+        self._outdated = True
         return self._move_to_index(index)
