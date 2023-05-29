@@ -1,5 +1,4 @@
 import time
-import copy
 import logging
 import requests
 
@@ -20,7 +19,7 @@ class ZeppelinBase(requests.Session):
         logger.set_stream_log_level(self.log, verbose=verbose)
 
         self.headers["User-Agent"] = \
-            "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:99.0) Gecko/20100101 Firefox/99.0"
+            "Mozilla/5.0 (X11; Linux x86_64; rv:99.0) Gecko/20100101 Firefox/99.0"
 
     @property
     def is_logged_in(self) -> bool:
