@@ -368,9 +368,9 @@ class HueDownload(requests.Session):
         """
 
         if isinstance(data, (pd.DataFrame, pd.Series)):
-            buffer = StringIO()
-            buffer.name = "pandas_dataframe"
-            data.to_csv(buffer, index=False, encoding="utf-8")
+            buffer = BytesIO()
+            buffer.name = "pd.DataFrame.xlsx"
+            data.to_excel(buffer, index=False)
             columns, nrows = columns or data.columns, nrows or data.shape[0]
         elif isinstance(data, str) and re.findall('\.xlsx$|\.xls$|\.xlsm$|\.xltx$|\.xltm$', data):
             # instead of read all data in memory using pd.read_...
@@ -503,7 +503,6 @@ class HueDownload(requests.Session):
 
         self.log.debug(f"downloading {table}")
         url = self.base_url + '/api/downloadInfo'
-        self.headers['Referer'] = 'http://10.19.185.103:8015/ud/downloadInfo'
         self.headers['Content-Type'] = 'application/json'
 
         res = self.post(url, data=json.dumps({
@@ -535,11 +534,13 @@ class HueDownload(requests.Session):
                        "uploadColumns": ",".join(columns),
                        'uploadRow': str(nrows)}
 
-        file = (os.path.basename(file_buffer.name), file_buffer)
+        if file_buffer.name == "pd.DataFrame.xlsx":
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            file = (os.path.basename(file_buffer.name), file_buffer, content_type)
+        else:
+            file = (os.path.basename(file_buffer.name), file_buffer)
         upload_info['file'] = file
         data = MultipartEncoder(fields=upload_info)
-
-        self.headers['Referer'] = 'http://10.19.185.103:8015/ud/uploadInfo'
         self.headers['Content-Type'] = data.content_type
         res = self.post(url, data=data)
         return res

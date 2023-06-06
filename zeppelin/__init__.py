@@ -288,7 +288,7 @@ class Zeppelin(ZeppelinBase):
 
 
 class Note(NoteBase):
-    _regex_py_sep = re.compile(r"(?s)#+(%[\w\d_\.]+\s*\n+.*?)(?=\n\s*#+%[\w\d_\.]+|\Z)")
+    _regex_py_sep = re.compile(r"(?s)(.*?)\n#*(%[\w\d_\.]+\s*\n+.*?)(?=\n\s*#+%[\w\d_\.]+|\Z)")
 
     def __init__(self,
                  zeppelin: Zeppelin,
@@ -352,6 +352,8 @@ class Note(NoteBase):
         lst_text = re.findall(Note._regex_py_sep, text)
         if len(lst_text) == 0:
             lst_text = [text]
+        else:
+            lst_text = [t for tup_grp in lst_text for t in tup_grp]
 
         paragraphs = [
             Paragraph.build_paragraph(text=t, config=config, interpreter=interpreter)
@@ -366,11 +368,14 @@ class Note(NoteBase):
         r_json = self._get_info()
         return r_json
 
-    def run_all(self):
+    def run_all(self, sync=True):
         # run all codes in note's paragraphs
         self.log.info(f"running note[{self.name}]")
-        r_json = self._run_all()
-        return r_json
+        if sync:
+            res = self._run_all()
+        else:
+            res = [p.run(sync=False) for p in self.iter_paragraphs()]
+        return res
 
     def stop_all(self):
         # stop all codes in note's paragraphs
