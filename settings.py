@@ -42,6 +42,7 @@ HIVE_PERFORMANCE_SETTINGS = {
     "hive.exec.parallel": "true",
     "hive.exec.parallel.thread.number": "4",
     "hive.exec.dynamic.partition.mode": "nonstrict",
+    "hive.tez.auto.reducer.parallelism": "true",
 
     # enable output compression to save network IO
     "hive.exec.compress.output": "true",
@@ -76,31 +77,32 @@ HIVE_PERFORMANCE_SETTINGS = {
 
     "hive.optimize.skewjoin": "true",
     "hive.optimize.skewjoin.compiletime": "true",
-    "hive.optimize.union.remove": "true",
+    "hive.skewjoin.key": "100000",
+    "hive.skewjoin.mapjoin.map.tasks": "10000",
+    "hive.skewjoin.mapjoin.min.split": "33554432",
+
+    # "hive.optimize.union.remove": "true",
 
     "hive.ignore.mapjoin.hint": "false",
     "hive.cbo.enable": "true",
     "hive.compute.query.using.stats": "true",
+    "hive.exec.orc.zerocopy": "true",
 
     # refer to: "Hive Understanding concurrent sessions queue allocation"
     "hive.execution.engine": "tez",
-    "tez.queue.name": "root.fengkong",
-    "hive.tez.auto.reducer.parallelism": "true",
+    # "tez.queue.name": "root.fengkong",
+
     # https://blog.cloudera.com/optimizing-hive-on-tez-performance/
-    "hive.prewarm.enabled": "true",
+    # "hive.prewarm.enabled": "true",
     # refer to: "Configure Tez Container Reuse"
-    "tez.am.mode.session": "true",
-    "tez.session.am.dag.submit.timeout.secs": f"{TEZ_SESSION_TIMEOUT_SECS}",
-    "tez.am.container.reuse.enabled": "true",
-    "tez.am.container.session.delay-allocation-millis": f"{TEZ_SESSION_TIMEOUT_SECS * 1000}",
+    # "tez.am.mode.session": "true",
+    # "tez.session.am.dag.submit.timeout.secs": f"{TEZ_SESSION_TIMEOUT_SECS}",
+    # "tez.am.container.reuse.enabled": "true",
+    # "tez.am.container.session.delay-allocation-millis": f"{TEZ_SESSION_TIMEOUT_SECS * 1000}",
 
     # resolve return code 3 from spark failure
     "mapred.map.tasks.speculative.execution": "true",
     "mapred.reduce.tasks.speculative.execution": "true",
-
-    # let spark app wait longer for executors' responses
-    "hive.spark.client.connect.timeout": "30000ms",
-    "hive.spark.client.server.connect.timeout": "300000ms"
 }
 
 PROGRESSBAR = {
