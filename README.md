@@ -1,12 +1,31 @@
 # 风控部工具包
 ## 包含以下模块:
 
+- 使用[vulcan hive client api](#使用vulcan.HiveClient运行sql，拉取结果)实现的hive sql单条运行/并行执行和跟踪任务
 - 使用[hue notebook api](#使用huenotebook调用hue-notebook-api)实现的hive sql运行、query状态跟踪和数据拉取等功能
 - 对[hue下载系统](#使用上传下载功能)的上传下载接口的调用
 - 使用[jupyter api](#使用jupyter模块)实现的上传和下载jupyter远端文件
 - 结合远端服务器命令行实现的jupyter kernel内存使用情况和变量内存占用的可视化
 - 通过[Zeppelin api](#使用zeppelin模块)实现的各种平台和note内容控制
 
+
+##使用vulcan.HiveClient运行sql，拉取结果
+``` python
+from workflow.vulcan import HiveClient
+import pandas as pd
+
+# HiveClient支持国内(`zh`)和墨西哥(`mex`)业务，默认国内。以墨西哥为例：
+hive = HiveClient("mex")
+
+# 直接返回pandas dataframe
+# 注意：该api不允许hql中出现 `;`
+df = hive.run_hql("show databases")
+df.head()
+
+# 并行提交hql
+lst_results = hive.run_hqls(["show databases", "show tables"])
+df = lst_results[0]
+```
 
 ## 使用hue模块运行sql，拉取结果
 ``` python
