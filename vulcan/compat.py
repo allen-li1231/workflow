@@ -2,7 +2,7 @@ import sys
 import time
 import logging
 from decimal import Decimal
-from threading import Thread
+from threading import Thread, Event
 
 from impala import hiveserver2 as hs2
 from impala._thrift_gen.TCLIService.ttypes import (
@@ -50,6 +50,12 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         self.log.debug('Cursor initialize (Impala session)')
 
         super(self).__init__(session)
+
+        self._stop_event = Event()
+        self._keep_alive_thread = Thread(
+            target=self._keep_alive, args=(self._stop_event,), daemon=True
+        )
+        self._keep_alive_thread.start()
 
     @classmethod
     def dictfetchall(cls, cursor):
@@ -118,11 +124,15 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
 
             time.sleep(self._get_sleep_interval(loop_start))
 
-    def _keep_alive(self):
-        while True:
+    def _keep_alive(self, event, timeout=30.):
+        while not event.is_set():
             self.service.ping()
+            time.sleep(timeout)
 
     def close(self):
+        # stop keep-alive thread
+        self._stop_event.set()
+        # close cursor
         super().close()
         self.service.close()
 
