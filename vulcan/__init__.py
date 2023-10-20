@@ -50,8 +50,10 @@ class HiveClient:
     @property
     def cursor(self):
         for c in self._workers:
-            if not c._last_operation_active:
+            if not c.is_executing():
                 return c
+
+        return self._workers[0]
 
     def _fetch_df(self, cursor):
         if cursor._in_old_env:
