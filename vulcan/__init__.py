@@ -3,8 +3,7 @@ import logging
 import getpass
 import pandas as pd
 from tqdm import tqdm
-from threading import Timer
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Iterable
 
 from .compat import HiveServer2CursorCompat
 from ..logger import set_stream_log_level
@@ -44,7 +43,9 @@ class HiveClient:
 
         self.env = env
         self._auth = auth
-        self._workers = [HiveServer2CursorCompat(**auth)]
+        self._workers = [
+            HiveServer2CursorCompat(**auth, database=database, config=config, verbose=verbose)
+        ]
 
     @property
     def cursor(self):
@@ -52,9 +53,9 @@ class HiveClient:
             if not c._last_operation_active:
                 return c
 
-    def fetch_df(self):
-        if self._in_old_env:
-            res = self.fetchall()
+    def _fetch_df(self, cursor):
+        if cursor._in_old_env:
+            res = cursor.fetchall()
             df = pd.DataFrame(res, copy=False)
 
             if len(res) > 0:
@@ -62,14 +63,11 @@ class HiveClient:
                 df.columns = columns
         else:
             from impala.util import as_pandas
-            df = as_pandas(self.cursor)
+            df = as_pandas(cursor)
    
         return df
 
-    def fields(self):
-        return [col[0] for col in self.cursor.description]
-
-    def run_hql(self, sql: str, config=None, verbose=True):
+    def run_hql(self, sql: str, param=None, config=None, verbose=True, sync=True):
         config = config if isinstance(config, dict) else self.config
 
         # thread unsafe
@@ -79,21 +77,21 @@ class HiveClient:
             if user_engine != "mr":
                 config["hive.execution.engine"] = "mr"
 
-        self.cursor.execute_async(sql, configuration=config)
+        self.cursor.execute_async(sql, parameters=param, configuration=config)
 
         if isinstance(user_engine, str):
             config["hive.execution.engine"] = user_engine
 
-        self._wait_to_finish(verbose=verbose)
-
-        return self.fetch_df()
-
+        if sync:
+            self._wait_to_finish(verbose=verbose)
+            return self._fetch_df()
 
     def run_hqls(self,
                  sqls,
-                 database="default",
+                 param=None,
+                 config=None,
                  n_jobs=VULCAN_CONCURRENT_SQL,
-                 wait_sec=0,
+                 wait_sec=1,
                  progressbar=True,
                  progressbar_offset=0,
                  desc: str="run_hqls progress",
@@ -131,13 +129,12 @@ class HiveClient:
         while i < len(sqls) or len(d_future) > 0:
             # check and collect completed results
             for worker, idx in list(d_future.items()):
-                result = worker._result
                 try:
-                    result.check_status()
-                    if sync and not result.is_ready():
+                    is_finished = worker._check_operation_status(verbose=False)
+                    if sync and not is_finished:
                         continue
 
-                    lst_result[idx] = result
+                    lst_result[idx] = self._fetch_df(worker)
                     del d_future[worker]
                     if progressbar:
                         pbar.update(1)
@@ -158,8 +155,9 @@ class HiveClient:
             while i < len(sqls) and (len(d_future) < n_jobs or not sync):
                 worker = self._workers[i]
                 try:
-                    #TODO: async run hql and check status in the above
-                    result = worker.run_hql(sqls[i], sync=False, verbose=False)
+                    p = param[i] if isinstance(param, Iterable) else param
+                    c = config[i] if isinstance(config, Iterable) else config
+                    worker.execute_async(sqls[i], parameters=p, configuration=c)
                     d_future[worker] = i
                 except Exception as e:
                     self.log.warning(e)
@@ -179,3 +177,13 @@ class HiveClient:
             pbar.close()
 
         return lst_result
+
+    def close(self):
+        for worker in self._workers:
+            worker.close()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __enter__(self):
+        return self

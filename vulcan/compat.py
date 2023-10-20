@@ -2,6 +2,7 @@ import sys
 import time
 import logging
 from decimal import Decimal
+from threading import Thread
 
 from impala import hiveserver2 as hs2
 from impala._thrift_gen.TCLIService.ttypes import (
@@ -27,13 +28,13 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         self.config = config.copy()
         self._in_old_env = (sys.version_info.major < 3) or (sys.version_info.minor < 9)
 
-        conn = hs2.connect(
+        session = hs2.connect(
             host, port, user=user, password=password, timeout=timeout, 
             use_ssl=use_ssl, ca_cert=ca_cert, kerberos_service_name=kerberos_service_name,
-            auth_mechanism=auth_mechanism, krb_host=None, use_http_transport=use_http_transport,
-            http_path=http_path
+            auth_mechanism=auth_mechanism, krb_host=krb_host, 
+            use_http_transport=use_http_transport, http_path=http_path
         )
-        self.service = hs2.HiveServer2Connection(conn, default_db=database)
+        self.service = hs2.HiveServer2Connection(session, default_db=database)
 
         self.log.debug('getting new session_handle')
 
@@ -76,7 +77,33 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
 
         return []
 
-    def _wait_to_finish(self, verbose=True):
+    def _check_operation_status(self, verbose=False):
+        req = TGetOperationStatusReq(operationHandle=self._last_operation.handle)
+        resp = self._last_operation._rpc('GetOperationStatus', req, True)
+        self._last_operation.update_has_result_set(resp)
+        operation_state = TOperationState._VALUES_TO_NAMES[resp.operationState]
+        if verbose:
+            log = self.get_log()
+            log.strip() and self.log.info(log)
+
+        if self._op_state_is_error(operation_state):
+            if resp.errorMessage:
+                raise OperationalError(resp.errorMessage)
+            else:
+                if self.fetch_error and self.has_result_set:
+                    self._last_operation_active = False
+                    self._last_operation.fetch()
+                else:
+                    raise OperationalError("Operation is in ERROR_STATE")
+
+        if not self._op_state_is_executing(operation_state):
+            if self._in_old_env:
+                self._last_operation_finished = True
+            return True
+
+        return False
+
+    def _wait_to_finish(self, verbose=False):
         # Prior to IMPALA-1633 GetOperationStatus does not populate errorMessage
         # in case of failure. If not populated, queries that return results
         # can get a failure description with a further call to FetchResults rpc.
@@ -85,30 +112,15 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
 
         loop_start = time.time()
         while True:
-            req = TGetOperationStatusReq(operationHandle=self._last_operation.handle)
-            resp = self._last_operation._rpc('GetOperationStatus', req, True)
-            self._last_operation.update_has_result_set(resp)
-            operation_state = TOperationState._VALUES_TO_NAMES[resp.operationState]
-            if verbose:
-                log = self.get_log()
-                log.strip() and self.log.info(log)
-
-            if self._op_state_is_error(operation_state):
-                if resp.errorMessage:
-                    raise OperationalError(resp.errorMessage)
-                else:
-                    if self.fetch_error and self.has_result_set:
-                        self._last_operation_active = False
-                        self._last_operation.fetch()
-                    else:
-                        raise OperationalError("Operation is in ERROR_STATE")
-
-            if not self._op_state_is_executing(operation_state):
-                if self._in_old_env:
-                    self._last_operation_finished = True
+            is_finised = self._check_operation_status(verbose=verbose)
+            if is_finised:
                 break
 
             time.sleep(self._get_sleep_interval(loop_start))
+
+    def _keep_alive(self):
+        while True:
+            self.service.ping()
 
     def close(self):
         super().close()
