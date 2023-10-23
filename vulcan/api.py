@@ -5,13 +5,13 @@ import pandas as pd
 from tqdm import tqdm
 from typing import Iterable
 
-from .compat import HiveServer2CursorCompat
+from .compat import HiveServer2CompatCursor, _in_old_env
 from ..logger import set_stream_log_level
 from ..utils import get_ip
 from ..settings import (VULCAN_ZH_IP, VULCAN_MEX_IP,
                        VULCAN_ZH_ROUTER_IP, VULCAN_MEX_ROUTER_IP,
                        VULCAN_CONCURRENT_SQL, MAX_LEN_PRINT_SQL,
-                       PROGRESSBAR)
+                       PROGRESSBAR, HIVE_PERFORMANCE_SETTINGS)
 
 
 class HiveClient:
@@ -40,21 +40,18 @@ class HiveClient:
             raise ValueError("env name `{}` currently not supported ".format(env))
 
         self.env = env
+        self.config = HIVE_PERFORMANCE_SETTINGS if config is None else config
         self._auth = auth
         self._workers = [
-            HiveServer2CursorCompat(**auth, database=database, config=config, verbose=verbose)
+            HiveServer2CompatCursor(**auth, database=database, config=config, verbose=verbose)
         ]
 
     @property
     def cursor(self):
-        for c in self._workers:
-            if not c.is_executing():
-                return c
-
         return self._workers[0]
 
     def _fetch_df(self, cursor):
-        if cursor._in_old_env:
+        if _in_old_env:
             res = cursor.fetchall()
             df = pd.DataFrame(res, copy=False)
 
@@ -68,7 +65,7 @@ class HiveClient:
         return df
 
     def run_hql(self, sql: str, param=None, config=None, verbose=True, sync=True):
-        config = config if isinstance(config, dict) else self.config
+        config = config.copy() if isinstance(config, dict) else self.config
 
         # thread unsafe
         user_engine = None
@@ -83,8 +80,8 @@ class HiveClient:
             config["hive.execution.engine"] = user_engine
 
         if sync:
-            self._wait_to_finish(verbose=verbose)
-            return self._fetch_df()
+            self.cursor._wait_to_finish(verbose=verbose)
+            return self._fetch_df(self.cursor)
 
     def run_hqls(self,
                  sqls,
@@ -112,9 +109,12 @@ class HiveClient:
         :return: list of NotebookResults
         """
 
+        if isinstance(sqls, str):
+            sqls = [s for s in sqls.split(";") if len(s.strip()) > 0]
+
         # setup logging level
         while len(self._workers) < len(sqls):
-            self._workers.append(HiveServer2CursorCompat(**self._auth))
+            self._workers.append(HiveServer2CompatCursor(**self._auth))
 
         # go for concurrent sql run
         i = 0
