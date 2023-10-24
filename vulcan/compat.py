@@ -47,7 +47,7 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
             hs2.log.info('Using database %s as default', conn.default_db)
             self.execute('USE %s' % conn.default_db)
 
-        self._stop_evenst = Event()
+        self._stop_event = Event()
         self._keep_alive_thread = Thread(
             target=self._keep_alive, args=(self._stop_event,), daemon=True
         )
