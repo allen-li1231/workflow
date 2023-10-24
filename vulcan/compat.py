@@ -6,14 +6,12 @@ from threading import Thread, Event
 
 from impala import dbapi, hiveserver2 as hs2
 from impala.error import OperationalError
+from impala._thrift_gen.TCLIService.ttypes import TGetOperationStatusReq, TOperationState
 
 from ..logger import set_stream_log_level
 
 _in_old_env = (sys.version_info.major <= 2) or (sys.version_info.minor <= 7)
-if not _in_old_env:
-    from impala._thrift_api import TGetOperationStatusReq, TOperationState
-else:
-    from impala._thrift_gen.TCLIService.ttypes import TGetOperationStatusReq, TOperationState
+
 
 class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
 
@@ -49,11 +47,11 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
             hs2.log.info('Using database %s as default', conn.default_db)
             self.execute('USE %s' % conn.default_db)
 
-        # self._stop_event = Event()
-        # self._keep_alive_thread = Thread(
-        #     target=self._keep_alive, args=(self._stop_event,), daemon=True
-        # )
-        # self._keep_alive_thread.start()
+        self._stop_event = Event()
+        self._keep_alive_thread = Thread(
+            target=self._keep_alive, args=(self._stop_event,), daemon=True
+        )
+        self._keep_alive_thread.start()
 
     @classmethod
     def dictfetchall(cls, cursor):
@@ -123,7 +121,7 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         operation_state = TOperationState._VALUES_TO_NAMES[resp.operationState]
         if verbose:
             log = self.get_log()
-            log.strip() and self.log.info(log)
+            log.strip() and print(log)
 
         if self._op_state_is_error(operation_state):
             if resp.errorMessage:
