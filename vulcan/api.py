@@ -61,7 +61,8 @@ class HiveClient:
         else:
             from impala.util import as_pandas
             df = as_pandas(cursor)
-   
+            df.columns = [col.split('.')[-1] for col in df.columns]
+
         return df
 
     def run_hql(self, sql: str, param=None, config=None, verbose=True, sync=True):
