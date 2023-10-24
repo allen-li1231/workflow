@@ -54,34 +54,30 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         # self._keep_alive_thread.start()
 
     @classmethod
-    def dictfetchall(cls, cursor):
-        "Returns all rows from a cursor as a dict"
-        def _format(v):
-            if isinstance(v, Decimal):
-                if v == int(v):
-                    v = int(v)
-                else:
-                    v = float(v)
-            return v
+    def _format(cls, v):
+        if isinstance(v, Decimal):
+            if v == int(v):
+                v = int(v)
+            else:
+                v = float(v)
+        return v
 
-        desc = cursor.description or []
-        return [
-            dict(zip([col[0] for col in desc], map(_format, row)))
-            for row in cursor.fetchall()
-        ]
+    def fetchall(self, verbose=False):
+        self._wait_to_finish(verbose=verbose)
+        if not self.has_result_set:
+            return []
 
-    def fetchall(self):
-        self._wait_to_finish()
-        if self.has_result_set:
-            try:
-                if _in_old_env:
-                    return self.dictfetchall(self)
-                else:
-                    return list(self)
-            except StopIteration:
-                return []
-
-        return []
+        try:
+            if _in_old_env:
+                desc = self.description or []
+                return [
+                    dict(zip([col[0] for col in desc], map(self._format, row)))
+                    for row in super().fetchall()
+                ]
+            else:
+                return list(self)
+        except StopIteration:
+            return []
 
     def execute(self, operation, param=None, config=None, verbose=True):
         """Synchronously execute a SQL query.

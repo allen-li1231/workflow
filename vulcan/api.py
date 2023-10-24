@@ -56,8 +56,7 @@ class HiveClient:
             df = pd.DataFrame(res, copy=False)
 
             if len(res) > 0:
-                columns = [col.split('.')[-1] for col in res[0].keys()]
-                df.columns = columns
+                df.columns = [col.split('.')[-1] for col in res[0].keys()]
         else:
             from impala.util import as_pandas
             df = as_pandas(cursor)
