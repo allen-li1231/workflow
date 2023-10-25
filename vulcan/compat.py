@@ -165,7 +165,6 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         # self._stop_event.set()
         # close cursor
         super().close()
-        self.session.close()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
