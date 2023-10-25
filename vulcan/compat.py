@@ -26,26 +26,26 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
 
         self.config = config
 
-        conn = dbapi.connect(
+        self.conn = dbapi.connect(
             host, port, database=database, user=user, password=password, timeout=timeout, 
             use_ssl=use_ssl, ca_cert=ca_cert, auth_mechanism=auth_mechanism,
             kerberos_service_name=kerberos_service_name, krb_host=krb_host,
             use_http_transport=use_http_transport, http_path=http_path
         )
-        session = conn.service.open_session(user, config)
+        session = self.conn.service.open_session(user, config)
 
         hs2.log.debug('HiveServer2Cursor(service=%s, session_handle=%s, '
                   'default_config=%s, hs2_protocol_version=%s)',
-                  conn.service, session.handle,
+                  self.conn.service, session.handle,
                   session.config, session.hs2_protocol_version)
 
         self.log.debug('Cursor initialize (Impala session)')
 
         super().__init__(session)
 
-        if conn.default_db is not None:
-            hs2.log.info('Using database %s as default', conn.default_db)
-            self.execute('USE %s' % conn.default_db)
+        if self.conn.default_db is not None:
+            hs2.log.info('Using database %s as default', self.conn.default_db)
+            self.execute('USE %s' % self.conn.default_db)
 
         # self._stop_event = Event()
         # self._keep_alive_thread = Thread(
