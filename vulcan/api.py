@@ -95,17 +95,16 @@ class HiveClient:
                  param=None,
                  config=None,
                  n_jobs=VULCAN_CONCURRENT_SQL,
-                 wait_sec=1,
+                 wait_sec=0.,
                  progressbar=True,
                  progressbar_offset=0,
-                 desc: str="run_hqls progress",
                  sync=True
                  ):
         """
         run concurrent HiveQL using impyla api.
 
         :param sqls: iterable instance of sql strings
-        :param database: string, default "default", database name
+        :param param: tuple of two strings, parameter tuple[0] will be replaced by value tuple[1]
         :param n_jobs: number of concurrent queries to run, it is recommended not greater than 4,
                        otherwise it would sometimes causes "Too many opened sessions" error
         :param wait_sec: wait seconds between submission of query
@@ -113,7 +112,7 @@ class HiveClient:
         :param progressbar_offset: use this parameter to control sql progressbar positions
         :param sync: whether to wait for all queries to complete execution
 
-        :return: list of NotebookResults
+        :return: list of pandas dataframe results
         """
 
         if isinstance(sqls, str):
@@ -129,8 +128,9 @@ class HiveClient:
         lst_result = [None] * len(sqls)
         if progressbar:
             setup_pbar = PROGRESSBAR.copy()
-            del setup_pbar["desc"]
-            pbar = tqdm(total=len(sqls), desc=desc,
+            if "desc" in setup_pbar:
+                del setup_pbar["desc"]
+            pbar = tqdm(total=len(sqls), desc="run_hqls progress",
                 position=progressbar_offset, **setup_pbar)
 
         while i < len(sqls) or len(d_future) > 0:

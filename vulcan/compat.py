@@ -27,8 +27,8 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         self.config = config
         self.verbose=verbose
 
-        if HS2connection is None:
-            self.log.debug(f"Connecting to '{host}:{port}'")
+        if not isinstance(HS2connection, hs2.HiveServer2Connection):
+            self.log.debug(f"Connecting to HS2: '{host}:{port}'")
             HS2connection = dbapi.connect(
                 host, port, database=database, user=user, password=password, timeout=timeout, 
                 use_ssl=use_ssl, ca_cert=ca_cert, auth_mechanism=auth_mechanism,

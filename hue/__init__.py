@@ -139,7 +139,8 @@ class hue:
         lst_result = [None] * len(sqls)
         if progressbar:
             setup_pbar = PROGRESSBAR.copy()
-            del setup_pbar["desc"]
+            if "desc" in setup_progressbar:
+                del setup_pbar["desc"]
             pbar = tqdm(total=len(sqls), desc=desc,
                 position=progressbar_offset, **setup_pbar)
 
