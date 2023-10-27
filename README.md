@@ -25,6 +25,12 @@ df.head()
 # 并行提交hql
 lst_results = hive.run_hqls(["show databases", "show tables"])
 df = lst_results[0]
+
+# 直接运行sql文件
+# 可以选择是否并行跑里面的sql
+lst_results = hive.run_hql_file("PATH-TO-SQL.sql", concurrent=True)
+# 或者提交完sql任务不阻塞（non-blocking）
+hive.run_hql_file("PATH-TO-SQL.sql", sync=False)
 ```
 
 ## 使用hue模块运行sql，拉取结果

@@ -212,13 +212,14 @@ class HiveClient:
                      config=None,
                      sync=True
                      ):
+
         with open(file_path, 'r', encoding=encoding) as f:
-            sql_text = f.read()
+            sql_text = f.read().strip()
 
         if concurrent:
-            self.run_hqls(sql_text, param=param, config=config, sync=sync)
+            return self.run_hqls(sql_text, param=param, config=config, sync=sync)
         else:
-            self.run_hql(sql_text, param=param, config=config, sync=sync)
+            return self.run_hql(sql_text, param=param, config=config, sync=sync)
 
     def close(self):
         for worker in self._workers:
