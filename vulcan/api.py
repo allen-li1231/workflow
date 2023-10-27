@@ -50,7 +50,13 @@ class HiveClient:
     def cursor(self):
         return self._workers[0]
 
+    def set_batch_size(self, size):
+        self.log.debug(f"Set cursor set_arraysize to {size}")
+        for worker in self._workers:
+            worker.set_arraysize(size)
+
     def _fetch_df(self, cursor):
+        self.log.debug(f"Fetch and output pandas dataframe")
         if _in_old_env:
             res = cursor.fetchall()
             df = pd.DataFrame(res, copy=False)
@@ -70,6 +76,7 @@ class HiveClient:
         # thread unsafe
         user_engine = None
         if sql.lower().count("union all") >= 3 and isinstance(config, dict):
+            self.log.debug(f"Detect large table unioned, fallback to mr engine")
             user_engine = config.get("hive.execution.engine", "mr")
             if user_engine != "mr":
                 config["hive.execution.engine"] = "mr"
@@ -114,7 +121,7 @@ class HiveClient:
 
         # setup logging level
         while len(self._workers) < len(sqls):
-            self._workers.append(HiveServer2CompatCursor(**self._auth))
+            self._workers.append(self.cursor.copy())
 
         # go for concurrent sql run
         i = 0
