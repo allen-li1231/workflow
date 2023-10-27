@@ -139,8 +139,10 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
             resp = self._last_operation._rpc('GetOperationStatus', req, True)
         else:
             resp = self._last_operation._rpc('GetOperationStatus', req)
+
         self._last_operation.update_has_result_set(resp)
         operation_state = TOperationState._VALUES_TO_NAMES[resp.operationState]
+
         log = self.get_log()
         if len(log.strip()) >0:
             not self.verbose and verbose and print(log)
