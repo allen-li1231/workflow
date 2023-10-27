@@ -115,7 +115,8 @@ class HiveClient:
         """
         run concurrent HiveQL using impyla api.
 
-        :param sqls: iterable instance of sql strings
+        :param sqls: iterable instance of sql strings,
+            or single sql string containing multiple sqls seperated by ';'
         :param param: tuple of two strings, parameter tuple[0] will be replaced by value tuple[1]
         :param n_jobs: number of concurrent queries to run, it is recommended not greater than 4,
                        otherwise it would sometimes causes "Too many opened sessions" error
@@ -202,6 +203,22 @@ class HiveClient:
             pbar.close()
 
         return lst_result
+
+    def run_hql_file(self,
+                     file_path,
+                     encoding='utf-8',
+                     concurrent=False,
+                     param=None,
+                     config=None,
+                     sync=True
+                     ):
+        with open(file_path, 'r', encoding=encoding) as f:
+            sql_text = f.read()
+
+        if concurrent:
+            self.run_hqls(sql_text, param=param, config=config, sync=sync)
+        else:
+            self.run_hql(sql_text, param=param, config=config, sync=sync)
 
     def close(self):
         for worker in self._workers:
