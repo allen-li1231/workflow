@@ -1,4 +1,4 @@
-# 风控部工具包
+# 风控模型工具包
 ## 包含以下模块:
 
 - 使用[vulcan hive client api](#使用vulcan.HiveClient运行sql，拉取结果)实现的hive sql单条运行/并行执行和跟踪任务
