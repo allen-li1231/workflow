@@ -135,6 +135,7 @@ class HiveClient:
             name=f"HiveClient-worker-{len(self._workers)}"
             self._workers.append(
                 self.cursor.copy(
+                    user=self.cursor.user, config=self.cursor.config,
                     name=name, log_file_path=os.path.join(os.getcwd(), f"{name}.log")
                 )
             )

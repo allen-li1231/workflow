@@ -74,9 +74,12 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
                 v = float(v)
         return v
     
-    def copy(self, name='HiveServer2CompatCursor', log_file_path=None):
+    def copy(self, user=None, config=None, 
+             name='HiveServer2CompatCursor', log_file_path=None
+             ):
         self.log.debug("Make self a copy")
         return HiveServer2CompatCursor(
+            user=user, config=config,
             HS2connection=self.conn, name=name, log_file_path=log_file_path
         )
 
@@ -140,7 +143,7 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         operation_state = TOperationState._VALUES_TO_NAMES[resp.operationState]
         log = self.get_log()
         if len(log.strip()) >0:
-            verbose and print(log)
+            not self.verbose and verbose and print(log)
             self.log.info(log)
 
         if self._op_state_is_error(operation_state):
@@ -161,12 +164,12 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         return False
 
     def _wait_to_finish(self, verbose=False):
-        self.log.debug('Waiting for query to finish')
+        self.log.info('Waiting for query to finish')
         # Prior to IMPALA-1633 GetOperationStatus does not populate errorMessage
         # in case of failure. If not populated, queries that return results
         # can get a failure description with a further call to FetchResults rpc.
         if _in_old_env and self._last_operation_finished:
-            self.log.debug('Query finished')
+            self.log.info('Query finished')
             return
 
         loop_start = time.time()
@@ -177,7 +180,7 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
 
             time.sleep(self._get_sleep_interval(loop_start))
 
-        self.log.debug('Query finished')
+        self.log.info(f'Query finished in {time.time() - loop_start:.3f} secs')
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
