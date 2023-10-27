@@ -6,7 +6,7 @@ from impala import dbapi, hiveserver2 as hs2
 from impala.error import OperationalError
 from impala._thrift_gen.TCLIService.ttypes import TGetOperationStatusReq, TOperationState
 
-from ..logger import set_stream_log_level
+from ..logger import set_stream_log_level, set_log_path
 from ..settings import MAX_LEN_PRINT_SQL
 
 _in_old_env = (sys.version_info.major <= 2) or (sys.version_info.minor <= 7)
@@ -17,11 +17,15 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
     def __init__(self, host='localhost', port=21050, user=None, password=None, database=None,
                  config=None, verbose=False, timeout=None, use_ssl=False, ca_cert=None,
                  kerberos_service_name='impala', auth_mechanism='NOSASL', krb_host=None,
-                 use_http_transport=False, http_path='', HS2connection=None
+                 use_http_transport=False, http_path='', name=None,
+                 log_file_path=None, HS2connection=None
                  ):
 
-        self.log = logging.getLogger(__name__ + f".HiveServer2CompatCursor")
+        name = ".HiveServer2CompatCursor" if name is None else name
+        self.log = logging.getLogger(__name__ + f".{name}")
         set_stream_log_level(self.log, verbose=verbose)
+        if not log_file_path is None:
+            set_log_path(self.log, log_file_path)
 
         self.user = user
         self.config = config
@@ -70,9 +74,11 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
                 v = float(v)
         return v
     
-    def copy(self):
+    def copy(self, name='HiveServer2CompatCursor', log_file_path=None):
         self.log.debug("Make self a copy")
-        return HiveServer2CompatCursor(HS2connection=self.conn)
+        return HiveServer2CompatCursor(
+            HS2connection=self.conn, name=name, log_file_path=log_file_path
+        )
 
     def fetchall(self, verbose=None):
         verbose = verbose if isinstance(verbose, bool) else self.verbose
@@ -132,9 +138,10 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
             resp = self._last_operation._rpc('GetOperationStatus', req)
         self._last_operation.update_has_result_set(resp)
         operation_state = TOperationState._VALUES_TO_NAMES[resp.operationState]
-        if verbose:
-            log = self.get_log()
-            log.strip() and print(log)
+        log = self.get_log()
+        if len(log.strip()) >0:
+            verbose and print(log)
+            self.log.info(log)
 
         if self._op_state_is_error(operation_state):
             if resp.errorMessage:

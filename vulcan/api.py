@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 import getpass
@@ -15,7 +16,13 @@ from ..settings import (VULCAN_ZH_IP, VULCAN_MEX_IP,
 
 
 class HiveClient:
-    def __init__(self, env='zh', database: str = None, config: dict = None, verbose=False):
+    def __init__(self,
+                 env='zh',
+                 database: str = None,
+                 config: dict = None,
+                 verbose=False
+                 ):
+        
         self.log = logging.getLogger(__name__ + f".HiveClient")
         set_stream_log_level(self.log, verbose=verbose)
 
@@ -43,7 +50,12 @@ class HiveClient:
         self.config = HIVE_PERFORMANCE_SETTINGS if config is None else config
         self._auth = auth
         self._workers = [
-            HiveServer2CompatCursor(**auth, database=database, config=config, verbose=verbose)
+            HiveServer2CompatCursor(
+                **auth,
+                database=database,
+                config=config,
+                name="HiveClient-worker-0",
+                verbose=verbose)
         ]
 
     @property
@@ -76,7 +88,7 @@ class HiveClient:
         # thread unsafe
         user_engine = None
         if sql.lower().count("union all") >= 3 and isinstance(config, dict):
-            self.log.debug(f"Detect large table unioned, fallback to mr engine")
+            self.log.debug(f"Detect multiple tables unioned, fallback to mr engine")
             user_engine = config.get("hive.execution.engine", "mr")
             if user_engine != "mr":
                 config["hive.execution.engine"] = "mr"
@@ -118,9 +130,14 @@ class HiveClient:
         if isinstance(sqls, str):
             sqls = [s for s in sqls.split(";") if len(s.strip()) > 0]
 
-        # setup logging level
+        # setup logging level and log file
         while len(self._workers) < len(sqls):
-            self._workers.append(self.cursor.copy())
+            name=f"HiveClient-worker-{len(self._workers)}"
+            self._workers.append(
+                self.cursor.copy(
+                    name=name, log_file_path=os.path.join(os.getcwd(), f"{name}.log")
+                )
+            )
 
         # go for concurrent sql run
         i = 0
