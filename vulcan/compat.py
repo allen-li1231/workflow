@@ -83,6 +83,12 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
             HS2connection=self.conn, name=name, log_file_path=log_file_path
         )
 
+    def _pop_from_buffer(self, size):
+        self._ensure_buffer_is_filled()
+        # put loggings into workflow's region
+        self.log.debug(f'pop_from_buffer: popping {size} row out of buffer')
+        return self._buffer.pop_many(size)
+    
     def fetchall(self, verbose=None):
         verbose = verbose if isinstance(verbose, bool) else self.verbose
         self._wait_to_finish(verbose=verbose)
@@ -94,9 +100,17 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         try:
             if _in_old_env:
                 desc = self.description or []
+                local_buffer = []
+                while True:
+                    try:
+                        elements = self._pop_from_buffer(self.buffersize)
+                        local_buffer.extend(elements)
+                    except StopIteration:
+                        break
+
                 return [
                     dict(zip([col[0] for col in desc], map(self._format, row)))
-                    for row in super().fetchall()
+                    for row in local_buffer
                 ]
             else:
                 return list(self)
@@ -189,3 +203,10 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
 
     def __enter__(self):
         return self
+
+    def __next__(self):
+        self._ensure_buffer_is_filled()
+        # move loggings into workflow's region
+        buffer = self._buffer.pop()
+        self.log.debug(f'__next__: popping {len(buffer)} row out of buffer')
+        return buffer
