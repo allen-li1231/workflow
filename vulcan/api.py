@@ -22,7 +22,7 @@ class HiveClient:
                  config: dict = None,
                  verbose=False
                  ):
-        
+
         self.log = logging.getLogger(__name__ + f".HiveClient")
         set_stream_log_level(self.log, verbose=verbose)
 
@@ -47,7 +47,7 @@ class HiveClient:
             raise ValueError("env name `{}` currently not supported ".format(env))
 
         self.env = env
-        self.config = HIVE_PERFORMANCE_SETTINGS if config is None else config
+        self.config = HIVE_PERFORMANCE_SETTINGS.copy() if config is None else config
         self._auth = auth
         self._workers = [
             HiveServer2CompatCursor(
@@ -75,12 +75,26 @@ class HiveClient:
 
             if len(res) > 0:
                 df.columns = [col.split('.')[-1] for col in res[0].keys()]
-        else:
+        elif cursor.has_result_set:
             from impala.util import as_pandas
             df = as_pandas(cursor)
             df.columns = [col.split('.')[-1] for col in df.columns]
+        else:
+            return pd.DataFrame()
 
         return df
+    
+    def update_hive_config(self, config: dict = None, **kwargs):
+        if isinstance(config, dict):
+            self.config.update(config)
+        elif kwargs:
+            self.config.update(kwargs)
+        else:
+            raise ValueError(f"expect dict or keyword argument, got {config}")
+
+    def remove_hive_config(self, key: str):
+        if key in self.config:
+            del self.config[key]
 
     def run_hql(self, sql: str, param=None, config=None, verbose=True, sync=True):
         config = config.copy() if isinstance(config, dict) else self.config
