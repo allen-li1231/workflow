@@ -103,58 +103,86 @@ def _cut_bin(x,
     return ret
 
 
-def bin_test(y_true, y_pred, x,
+def bin_stat(bin_x,
+             y_true, 
+             y_pred=None, 
              bins=10,
              cut_method="quantile",
              closed="right",
              precision=3,
              fillna=np.nan,
-             n_jobs=3):
+             n_jobs=5):
 
     # calculate bad label count and cumsum it
-    def _bin_helper(bin_):
-        bin_y_true = y_true.groupby(bin_).sum()
-        total_y_true = y_true.sum(axis=0)
+    def _bin_stat_helper(bin_, ascending=True):
+        bad_num = y_true.groupby(bin_).sum()
+        bin_num = y_true.groupby(bin_).count()
 
-        bin_y_pred = y_pred.groupby(bin_).sum()
-        total_y_pred = y_pred.sum(axis=0)
+        bad_num.sort_values(ascending=ascending)
+        bin_num.sort_values(ascending=ascending)
 
-        bad_rate = bin_y_true / total_y_true
-        good_rate = (~y_true).groupby(bin_).sum() / (~y_true).sum()
-        ks = (bad_rate.cumsum() - good_rate.cumsum()).abs()
+        good_num = bin_num - bad_num
+        bad_rate = bad_num / bin_num
+        good_rate = 1. - bad_rate
+        odds = good_rate / bad_rate
+        bin_rate = bin_num / bin_num.sum()
+        cum_bin_bad_rate = bad_num.cumsum()
+        global_bad_rate = bad_num / bad_num.sum()
+        cum_global_bad_rate = global_bad_rate.cumsum()
+        cum_bin_good_rate = good_num.cumsum()
+        global_good_rate = good_num / good_num.sum()
+        cum_global_good_rate = global_good_rate.cumsum()
+        ks = (cum_global_bad_rate - cum_global_good_rate).abs()
+        lift = cum_bin_bad_rate / cum_bin_bad_rate.iloc[-1]
 
-        expect_rate = bin_y_pred / total_y_pred
-        psi = PSI(expect_rate, bad_rate)
-        return {
-            "true_positive": bin_y_true,
-            "pred_positive": bin_y_pred,
-            "bad_rate": bad_rate,
-            "good_rate": good_rate,
-            "ks": ks,
-            "psi": psi
-        }
+        lst_stat = [bin_num, bad_num, good_num, bin_rate, bad_rate, good_rate, odds,
+                    global_bad_rate, global_good_rate, cum_bin_bad_rate, cum_bin_good_rate,
+                    cum_global_bad_rate, cum_global_good_rate, ks, lift]
+
+        if isinstance(y_pred, Iterable):
+            bin_y_pred = y_pred.groupby(bin_).sum()
+            total_y_pred = y_pred.groupby(bin_).count()
+            expect_rate = bin_y_pred / total_y_pred
+            psi = PSI(expect_rate, bad_rate)
+            lst_stat.append(psi)
+
+            return pd.DataFrame({
+                "true_positive": bad_num,
+                "pred_positive": bin_y_pred,
+                "bad_rate": bad_rate,
+                "good_rate": good_rate,
+                "ks": ks,
+                "psi": psi
+            }, copy=False)
+        return pd.DataFrame({
+                "true_positive": bad_num,
+                "bad_rate": bad_rate,
+                "good_rate": good_rate,
+                "ks": ks,
+        }, copy=False)
 
     if not isinstance(y_true, pd.Series):
         y_true = pd.Series(y_true, copy=True, name="y_true")
 
-    if not isinstance(y_pred, pd.Series):
+    if not y_pred is None and not isinstance(y_pred, pd.Series):
         y_pred = pd.Series(y_pred, copy=True, name="y_pred")
     
-    bins = _cut_bin(x,
-                    bins=bins,
-                    cut_method=cut_method,
-                    closed=closed,
-                    precision=precision,
-                    fillna=fillna)
-    if x.ndim == 1:
-        return _bin_helper(bins)
-    elif x.ndim == 2:
+    if not isinstance(bins, Iterable):
+        bins = _cut_bin(bin_x,
+                        bins=bins,
+                        cut_method=cut_method,
+                        closed=closed,
+                        precision=precision,
+                        fillna=fillna)
+    if bin_x.ndim == 1:
+        return _bin_stat_helper(bins)
+    elif bin_x.ndim == 2:
         d_future = {}
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:
             for i, b in enumerate(bins):
                 d_future[
                     executor.submit(
-                        _bin_helper,
+                        _bin_stat_helper,
                         bin_=b)
                 ] = i
 

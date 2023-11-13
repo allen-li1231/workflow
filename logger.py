@@ -8,13 +8,26 @@ root.setLevel(logging.DEBUG)
 # create formatter
 formatter = logging.Formatter('%(asctime)s-%(name)s-%(levelname)s %(message)s')
 
-# create file and console handler and set level to debug
-log_file = os.path.join(os.getcwd(), 'workflow.log')
-fh = logging.FileHandler(log_file)
-fh.setLevel(logging.DEBUG)
-fh.setFormatter(formatter)
 
-root.addHandler(fh)
+def set_log_path(log, path):
+    # create file handler and set level to debug
+    basenanme = os.path.dirname(path)
+    if not os.path.exists(basenanme):
+        os.mkdir(basenanme)
+
+    fh = None
+    for handler in log.handlers:
+        if isinstance(handler, logging.FileHandler):
+            fh = handler
+            break
+
+    if fh is None:
+        fh = logging.FileHandler(path)
+        log.addHandler(fh)
+
+    fh.baseFilename = os.path.abspath(path)
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(formatter)
 
 
 def setup_stdout_level(logger, level):
@@ -40,3 +53,6 @@ def set_stream_log_level(log, verbose):
             setup_stdout_level(log, logging.INFO)
         else:
             setup_stdout_level(log, logging.WARNING)
+
+
+set_log_path(root, path=os.path.join(os.getcwd(), "workflow.log"))

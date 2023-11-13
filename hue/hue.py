@@ -13,9 +13,9 @@ from html import unescape
 from unicodedata import normalize
 import requests
 
-from . import logger
-from .settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR, HUE_INACTIVE_TIME
-from .decorators import retry, ensure_login
+from .. import logger
+from ..settings import HUE_BASE_URL, MAX_LEN_PRINT_SQL, HIVE_PERFORMANCE_SETTINGS, PROGRESSBAR, HUE_INACTIVE_TIME
+from ..decorators import retry, ensure_login
 
 __all__ = ["Notebook", "Beeswax"]
 
