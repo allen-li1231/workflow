@@ -9,12 +9,12 @@ from .metrics import bin_test
 
 def binary_classification_report(y_true,
                                  y_score,
-                                 threshold,
-                                 x=None,
+                                 label=1,
+                                 threshold=None,
+                                 bin_x=None,
                                  bins=10,
-                                 sample_weight=None,
-                                 label=None,
                                  cut_method="quantile",
+                                 sample_weight=None,
                                  precision=5
                                  ):
     # TODO: variable PSI to be added to report
@@ -27,47 +27,56 @@ def binary_classification_report(y_true,
     auc = (tpr * np.diff(fpr, prepend=0.)).sum()
     ks = abs(fpr - tpr).max()
 
-    label = label if label is not None else 1
+    score_stats = {
+        "roc": {
+            "fpr": fpr.round(precision).tolist(),
+            "tpr": tpr.round(precision).tolist(),
+            "threshold": ths.round(precision).tolist()
+        },
+        "auc": np.round(auc, precision),
+        "ks": np.round(ks, precision),
+    }
 
-    y_pred = y_score > threshold
+    if threshold is not None:
+        y_pred = y_score > threshold
 
-    (pos_p, neg_p), (pos_r, neg_r), (pos_f1, neg_f1), (pos_s, neg_s) = \
-        precision_recall_fscore_support(y_true=y_true, y_pred=y_pred,
-                                        pos_label=label, sample_weight=sample_weight)
-    balanced_acc = balanced_accuracy_score(y_true=y_true, y_pred=y_pred,
-                                           sample_weight=sample_weight)
-    if x is None:
-        binned_stat = None
-    else:
-        binned_stat = bin_test(y_true=y_true, y_pred=y_pred,
-                               x=x, bins=bins,
-                               cut_method=cut_method, precision=precision)
-    return {
-        "result_type": "binary",
-        "result_stats":{
-            "roc": {
-                "fpr": fpr.round(precision).tolist(),
-                "tpr": tpr.round(precision).tolist(),
-                "threshold": ths.round(precision).tolist()
-            },
-            "auc": np.round(auc, precision),
-            "ks": np.round(ks, precision),
+        (pos_p, neg_p), (pos_r, neg_r), (pos_f1, neg_f1), (pos_s, neg_s) = \
+            precision_recall_fscore_support(y_true=y_true, y_pred=y_pred,
+                                            pos_label=label, sample_weight=sample_weight)
+        balanced_acc = balanced_accuracy_score(y_true=y_true, y_pred=y_pred,
+                                            sample_weight=sample_weight)
+        if bin_x is None:
+            binned_stat = None
+        else:
+            binned_stat = bin_test(bin_x=bin_x, y_true=y_true,
+                                   y_pred=y_pred, bins=bins,
+                                   cut_method=cut_method, precision=precision)
+        predict_stats = {
             "balanced_acc": np.round(balanced_acc, precision), 
             "precision": [np.round(pos_p, precision), np.round(neg_p, precision)],
             "recall": [np.round(pos_r, precision), np.round(neg_r, precision)],
             "f1": [np.round(pos_f1, precision), np.round(neg_f1, precision)],
             "support": [np.round(pos_s, precision), np.round(neg_s, precision)],
-        },
-        "feature_stats": binned_stat
-    }
+        }
+    else:
+        predict_stats = {}
+        binned_stat = bin_test(bin_x=bin_x, y_true=y_true,
+                               y_pred=None, bins=bins,
+                               cut_method=cut_method, precision=precision)
+
+    score_stats.update(predict_stats)
+    score_stats["bin_stats"] = binned_stat
+
+    return score_stats
 
 
 def model_report(y_true, y_score, x, threshold=None, label=None, sample_weight=None):
     type_y_true, type_y_pred = type_of_target(y_true), type_of_target(y_score)
-    if type_y_true != 'binary' or type_y_pred != 'continuous':
-        return binary_classification_report(y_true=y_true, y_score=y_score, x=x,
+    if type_y_true == 'binary' and type_y_pred == 'continuous':
+        return binary_classification_report(y_true=y_true, y_score=y_score, bin_x=x,
                                             threshold=threshold, sample_weight=sample_weight,
                                             label=label)
+    raise NotImplementedError("type of target not implemented yet")
 
 
 if __name__ == "__main__":
@@ -79,4 +88,4 @@ if __name__ == "__main__":
 
     fpr, tpr, threshold = roc_curve(df["dummy_prob"] > 0.9, df["prob"])
     all_stats = binary_classification_report(y_true=df["dummy_prob"] > 0.6, y_score=df["prob"],
-                                             threshold=0.6, x=df[["x1", "x2"]])
+                                             threshold=0.6, bin_x=df[["x1", "x2"]])

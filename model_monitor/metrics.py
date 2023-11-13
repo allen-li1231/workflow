@@ -103,28 +103,33 @@ def _cut_bin(x,
     return ret
 
 
-def bin_test(y_true, y_pred, x,
+def bin_test(bin_x,
+             y_true, 
+             y_pred=None, 
              bins=10,
              cut_method="quantile",
              closed="right",
              precision=3,
              fillna=np.nan,
-             n_jobs=3):
+             n_jobs=5):
 
     # calculate bad label count and cumsum it
-    def _bin_helper(bin_):
+    def _bin_stat_helper(bin_):
         bin_y_true = y_true.groupby(bin_).sum()
         total_y_true = y_true.sum(axis=0)
 
-        bin_y_pred = y_pred.groupby(bin_).sum()
-        total_y_pred = y_pred.sum(axis=0)
+        if isinstance(y_pred, Iterable):
+            bin_y_pred = y_pred.groupby(bin_).sum()
+            total_y_pred = y_pred.sum(axis=0)
 
         bad_rate = bin_y_true / total_y_true
         good_rate = (~y_true).groupby(bin_).sum() / (~y_true).sum()
         ks = (bad_rate.cumsum() - good_rate.cumsum()).abs()
 
-        expect_rate = bin_y_pred / total_y_pred
-        psi = PSI(expect_rate, bad_rate)
+        if isinstance(y_pred, Iterable):
+            expect_rate = bin_y_pred / total_y_pred
+            psi = PSI(expect_rate, bad_rate)
+
         return {
             "true_positive": bin_y_true,
             "pred_positive": bin_y_pred,
@@ -140,21 +145,22 @@ def bin_test(y_true, y_pred, x,
     if not isinstance(y_pred, pd.Series):
         y_pred = pd.Series(y_pred, copy=True, name="y_pred")
     
-    bins = _cut_bin(x,
-                    bins=bins,
-                    cut_method=cut_method,
-                    closed=closed,
-                    precision=precision,
-                    fillna=fillna)
-    if x.ndim == 1:
-        return _bin_helper(bins)
-    elif x.ndim == 2:
+    if not isinstance(bins, Iterable):
+        bins = _cut_bin(bin_x,
+                        bins=bins,
+                        cut_method=cut_method,
+                        closed=closed,
+                        precision=precision,
+                        fillna=fillna)
+    if bin_x.ndim == 1:
+        return _bin_stat_helper(bins)
+    elif bin_x.ndim == 2:
         d_future = {}
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:
             for i, b in enumerate(bins):
                 d_future[
                     executor.submit(
-                        _bin_helper,
+                        _bin_stat_helper,
                         bin_=b)
                 ] = i
 
