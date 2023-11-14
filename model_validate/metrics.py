@@ -21,14 +21,15 @@ def PSI(y_true, y_pred):
     return psi
 
 
-def _cut_bin(x,
-             bins=10,
-             cut_method="quantile",
-             closed="right",
-             precision=None,
-             fillna=np.nan,
-             retbin=False
-             ):
+def cut_bin(x,
+            bins=10,
+            cut_method="quantile",
+            closed="right",
+            precision=None,
+            fillna=np.nan,
+            retbin=False
+            ):
+
     if not isinstance(bins, Iterable) and (not np.isreal(bins) or bins < 2):
         raise ValueError("bins should be iterable or integer no less than 2")
 
@@ -41,7 +42,8 @@ def _cut_bin(x,
     if x.ndim > 2:
         raise ValueError("currently not support x with axis larger than 2")
 
-    if not isinstance(bins, Iterable):
+    b_bins_is_cut = isinstance(bins, Iterable)
+    if not b_bins_is_cut:
         # rewrite pandas cut/qcut methods to support inf boundaries
         if cut_method == 'quantile':
             q = np.linspace(0, 1, bins + 1)
@@ -82,11 +84,11 @@ def _cut_bin(x,
     # indices specified by -1 are regarded as NA. If Index doesn’t hold NA, raise ValueError."
     ids -= 1
 
-    if precision is not None:
+    if not b_bins_is_cut and precision is not None:
         if closed != "left":
-            bins = np.ceil(10 ** precision * bins, out=bins) / 10 ** precision
+            bins = np.ceil((10 ** precision) * bins, out=bins) / (10 ** precision)
         else:
-            bins = np.floor(10 ** precision * bins, out=bins) / 10 ** precision
+            bins = np.floor((10 ** precision) * bins, out=bins) / (10 ** precision)
 
     if bins.ndim == 1:
         labels = pd.IntervalIndex.from_breaks(np.unique(bins), closed=closed)
@@ -104,10 +106,11 @@ def _cut_bin(x,
 
 
 def bin_stat(bin_x,
-             y_true, 
-             y_pred=None, 
+             y_true,
+             y_pred=None,
              bins=10,
              cut_method="quantile",
+             ascending=True,
              closed="right",
              precision=3,
              fillna=np.nan,
@@ -118,64 +121,63 @@ def bin_stat(bin_x,
         bad_num = y_true.groupby(bin_).sum()
         bin_num = y_true.groupby(bin_).count()
 
-        bad_num.sort_values(ascending=ascending)
-        bin_num.sort_values(ascending=ascending)
-
+        bad_num.sort_index(ascending=ascending)
+        bin_num.sort_index(ascending=ascending)
         good_num = bin_num - bad_num
+
         bad_rate = bad_num / bin_num
         good_rate = 1. - bad_rate
+
         odds = good_rate / bad_rate
+
         bin_rate = bin_num / bin_num.sum()
-        cum_bin_bad_rate = bad_num.cumsum()
+        cum_bin_num = bin_num.cumsum()
+        cum_bin_bad_num = bad_num.cumsum()
+        cum_bin_bad_rate = cum_bin_bad_num / cum_bin_num
         global_bad_rate = bad_num / bad_num.sum()
         cum_global_bad_rate = global_bad_rate.cumsum()
-        cum_bin_good_rate = good_num.cumsum()
+
+        cum_bin_good_num = good_num.cumsum()
+        cum_bin_good_rate = cum_bin_good_num / cum_bin_num
         global_good_rate = good_num / good_num.sum()
         cum_global_good_rate = global_good_rate.cumsum()
-        ks = (cum_global_bad_rate - cum_global_good_rate).abs()
+        # ks = (cum_global_bad_rate - cum_global_good_rate).abs()
         lift = cum_bin_bad_rate / cum_bin_bad_rate.iloc[-1]
 
-        lst_stat = [bin_num, bad_num, good_num, bin_rate, bad_rate, good_rate, odds,
-                    global_bad_rate, global_good_rate, cum_bin_bad_rate, cum_bin_good_rate,
-                    cum_global_bad_rate, cum_global_good_rate, ks, lift]
+        d_stat = {"bin_num": bin_num, "bad_num": bad_num, "good_num": good_num,
+                  "bin_rate": bin_rate, "bad_rate": bad_rate, "good_rate": good_rate,
+                  "odds": odds,
+                  "global_bad_rate": global_bad_rate, "global_good_rate": global_good_rate,
+                  "cum_bin_bad_rate": cum_bin_bad_rate, "cum_bin_good_rate": cum_bin_good_rate,
+                  "cum_global_bad_rate": cum_global_bad_rate, "cum_global_good_rate": cum_global_good_rate,
+                  # "ks": ks, 
+                  "lift": lift}
 
         if isinstance(y_pred, Iterable):
             bin_y_pred = y_pred.groupby(bin_).sum()
             total_y_pred = y_pred.groupby(bin_).count()
             expect_rate = bin_y_pred / total_y_pred
             psi = PSI(expect_rate, bad_rate)
-            lst_stat.append(psi)
+            d_stat["psi"] = psi
 
-            return pd.DataFrame({
-                "true_positive": bad_num,
-                "pred_positive": bin_y_pred,
-                "bad_rate": bad_rate,
-                "good_rate": good_rate,
-                "ks": ks,
-                "psi": psi
-            }, copy=False)
-        return pd.DataFrame({
-                "true_positive": bad_num,
-                "bad_rate": bad_rate,
-                "good_rate": good_rate,
-                "ks": ks,
-        }, copy=False)
+        df_stat = pd.DataFrame(d_stat, copy=False)
+        df_stat["total_bad_rate"] = cum_bin_bad_rate.iloc[-1]
+        return df_stat
 
     if not isinstance(y_true, pd.Series):
         y_true = pd.Series(y_true, copy=True, name="y_true")
 
     if not y_pred is None and not isinstance(y_pred, pd.Series):
         y_pred = pd.Series(y_pred, copy=True, name="y_pred")
-    
-    if not isinstance(bins, Iterable):
-        bins = _cut_bin(bin_x,
-                        bins=bins,
-                        cut_method=cut_method,
-                        closed=closed,
-                        precision=precision,
-                        fillna=fillna)
+
+    bins = cut_bin(bin_x,
+                   bins=bins,
+                   cut_method=cut_method,
+                   closed=closed,
+                   precision=precision,
+                   fillna=fillna)
     if bin_x.ndim == 1:
-        return _bin_stat_helper(bins)
+        return _bin_stat_helper(bins, ascending=ascending)
     elif bin_x.ndim == 2:
         d_future = {}
         with ThreadPoolExecutor(max_workers=n_jobs) as executor:
@@ -183,7 +185,7 @@ def bin_stat(bin_x,
                 d_future[
                     executor.submit(
                         _bin_stat_helper,
-                        bin_=b)
+                        bin_=b, ascending=ascending)
                 ] = i
 
             # won't work only if returned value is None
