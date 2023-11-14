@@ -274,40 +274,33 @@ def binary_classification_report_by_date(
             bins=bins,
             ascending=True,
             date_x=df_y["loan_day"],
-            date_cutoffs=["2023-05-12", "2023-06-16", "2023-07-16", "2023-08-20"],
+            date_cutoffs=["2023-09-15", "2023-10-20"],
             stat_cols=None, 
         )
+    >>> df_stats
+                            auc       ks
+    20230609 ~ 20230914  0.55072  0.13010
+    20230915 ~ 20231019  0.62877  0.18950
+    20231020 ~ 20231021  0.59387  0.17466
 
-    >>> append_df_to_excel('d:/temp/test.xlsx', df, sheet_name='Sheet2',
-                           index=False)
-
-    >>> append_df_to_excel('d:/temp/test.xlsx', df, sheet_name='Sheet2',
-                           index=False, startrow=25)
-        bad_num = y_true.groupby(bin_).sum()
-        bin_num = y_true.groupby(bin_).count()
-
-        bad_num.sort_index(ascending=ascending)
-        bin_num.sort_index(ascending=ascending)
-        good_num = bin_num - bad_num
-
-        bad_rate = bad_num / bin_num
-        good_rate = 1. - bad_rate
-
-        odds = good_rate / bad_rate
-
-        bin_rate = bin_num / bin_num.sum()
-        cum_bin_num = bin_num.cumsum()
-        cum_bin_bad_num = bad_num.cumsum()
-        cum_bin_bad_rate = cum_bin_bad_num / cum_bin_num
-        global_bad_rate = bad_num / bad_num.sum()
-        cum_global_bad_rate = global_bad_rate.cumsum()
-
-        cum_bin_good_num = good_num.cumsum()
-        cum_bin_good_rate = cum_bin_good_num / cum_bin_num
-        global_good_rate = good_num / good_num.sum()
-        cum_global_good_rate = global_good_rate.cumsum()
-        # ks = (cum_global_bad_rate - cum_global_good_rate).abs()
-        lift = cum_bin_bad_rate / cum_bin_bad_rate.iloc[-1]
+    >>> df_bin_stats
+                                            bin_num  bad_num  good_num  bin_rate  
+    date                bin                                                    
+    20230609 ~ 20230914 (-inf, 569.0]      3499     2339      1160  0.204895   ...
+                        (569.0, 600.0]     3416     2091      1325  0.200035   ...
+                        (600.0, 627.0]     3349     1975      1374  0.196112   ...
+                        (627.0, 665.0]     3417     1811      1606  0.200094   ...
+                        (665.0, inf]       3396     1407      1989  0.198864   ...
+    20230915 ~ 20231019 (-inf, 606.0]      2295     1293      1002  0.200910   ...
+                        (606.0, 647.0]     2305     1158      1147  0.201786   ...
+                        (647.0, 686.0]     2300      970      1330  0.201348   ...
+                        (686.0, 735.0]     2250      795      1455  0.196971   ...
+                        (735.0, inf]       2273      606      1667  0.198985   ...
+    20231020 ~ 20231021 (-inf, 646.0]       140       57        83  0.202899   ...
+                        (646.0, 692.0]      140       57        83  0.202899   ...
+                        (692.0, 731.0]      135       38        97  0.195652   ...
+                        (731.0, 774.0]      138       38       100  0.200000   ...
+                        (774.0, inf]        137       30       107  0.198551   ...
     """
 
     # senario 1: date separation info not fully given
