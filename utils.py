@@ -137,8 +137,6 @@ def append_df_to_excel(filename, df: pd.DataFrame,
 
     >>> append_df_to_excel('d:/temp/test.xlsx', df, sheet_name='Sheet2',
                            index=False, startrow=25)
-
-    (c) [MaxU](https://stackoverflow.com/users/5741205/maxu?tab=profile)
     """
     # Excel file doesn't exist - saving and exiting
     if not os.path.isfile(filename):
