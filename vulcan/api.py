@@ -107,6 +107,7 @@ class HiveClient:
             if user_engine != "mr":
                 config["hive.execution.engine"] = "mr"
 
+    
         self.cursor.execute_async(sql, parameters=param, configuration=config)
 
         if isinstance(user_engine, str):

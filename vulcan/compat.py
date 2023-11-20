@@ -3,7 +3,7 @@ import time
 import logging
 from decimal import Decimal
 from impala import dbapi, hiveserver2 as hs2
-from impala.error import OperationalError
+from impala.error import OperationalError, HiveServer2Error
 from impala._thrift_gen.TCLIService.ttypes import TGetOperationStatusReq, TOperationState
 
 from ..logger import set_stream_log_level, set_log_path
@@ -41,6 +41,9 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
             )
         self.conn = HS2connection
 
+        self._login(user, config)
+
+    def _login(self, user, config):
         self.log.debug(f"Opening HS2 session for [{user}]")
         session = self.conn.service.open_session(user, config)
 
@@ -146,6 +149,14 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
         self.execute_async(operation, parameters=param, configuration=config)
         self._wait_to_finish(verbose=verbose)  # make execute synchronous
 
+    def execute_async(self, operation, parameters=None, configuration=None):
+        try:
+            return super().execute_async(operation, parameters, configuration)
+        except HiveServer2Error as e:
+            if str(e).startswith("Invalid SessionHandle"):
+                self._login(self.user, self.config)
+                return super().execute_async(operation, parameters, configuration)
+
     def _check_operation_status(self, verbose=False):
         req = TGetOperationStatusReq(operationHandle=self._last_operation.handle)
 
@@ -189,12 +200,15 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
             return
 
         loop_start = time.time()
-        while True:
-            is_finised = self._check_operation_status(verbose=verbose)
-            if is_finised:
-                break
+        try:
+            while True:
+                is_finised = self._check_operation_status(verbose=verbose)
+                if is_finised:
+                    break
 
-            time.sleep(self._get_sleep_interval(loop_start))
+                time.sleep(self._get_sleep_interval(loop_start))
+        except KeyboardInterrupt:
+            self.cancel_operation()
 
         self.log.info(f'Query finished in {time.time() - loop_start:.3f} secs')
 
