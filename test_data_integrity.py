@@ -16,7 +16,7 @@ N_FEATURES = 434
 VAR_GROUP = "plist_variable"
 FEATURE_PREFIX = "plist_"
 
-# configure scacely
+# configure scarcely
 DIR_WORK_DATA = "./work_data/"
 # TILL_MEX_TIME = TILL_CHN_TIME - dt.timedelta(hours=14)
 TILL_CHN_TIME = TILL_MEX_TIME + dt.timedelta(hours=14)

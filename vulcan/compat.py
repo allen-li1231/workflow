@@ -154,11 +154,8 @@ class HiveServer2CompatCursor(hs2.HiveServer2Cursor):
             return super().execute_async(operation, parameters, configuration)
         except HiveServer2Error as e:
             if str(e).startswith("Invalid SessionHandle"):
-                self.log.info("try to relogin for invalid session")
                 self._login(self.user, self.config)
                 return super().execute_async(operation, parameters, configuration)
-            else:
-                raise e
 
     def _check_operation_status(self, verbose=False):
         req = TGetOperationStatusReq(operationHandle=self._last_operation.handle)
