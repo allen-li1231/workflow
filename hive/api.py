@@ -8,10 +8,10 @@ from typing import Iterable
 
 from .compat import HiveServer2CompatCursor, _in_old_env
 from ..logger import set_stream_log_level
-from ..utils import get_ip
+# from ..utils import get_ip
 from ..settings import (HIVESERVER_IP, HIVESERVER_PORT,
                         HIVECLI_MAX_CONCURRENT_SQL, MAX_LEN_PRINT_SQL,
-                       PROGRESSBAR, HIVE_PERFORMANCE_SETTINGS)
+                        PROGRESSBAR, HIVE_PERFORMANCE_SETTINGS)
 
 
 class HiveClient:
@@ -25,7 +25,7 @@ class HiveClient:
 
         self.log = logging.getLogger(__name__ + f".HiveClient")
         set_stream_log_level(self.log, verbose=verbose)
-        self.auth = {
+        self.auth = auth if isinstance(auth, dict) else {
             'host': HIVESERVER_IP,
             'port': HIVESERVER_PORT,
             'user': input('Please provide Hive username:'),
@@ -57,7 +57,7 @@ class HiveClient:
         self._auth = auth
         self._workers = [
             HiveServer2CompatCursor(
-                **auth,
+                **self._auth,
                 database=database,
                 config=config,
                 name="HiveClient-worker-0",
