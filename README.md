@@ -1,35 +1,41 @@
-# 风控模型工具包
-## 包含以下模块:
+# Workflow: Data Pipeline Integration for Data Scientists
+## Includes Modules:
 
-- 使用[vulcan hive client api](#使用vulcan.HiveClient运行sql，拉取结果)实现的hive sql单条运行/并行执行和跟踪任务
-- 使用[hue notebook api](#使用huenotebook调用hue-notebook-api)实现的hive sql运行、query状态跟踪和数据拉取等功能
-- 对[hue下载系统](#使用上传下载功能)的上传下载接口的调用
-- 使用[jupyter api](#使用jupyter模块)实现的上传和下载jupyter远端文件
-- 结合远端服务器命令行实现的jupyter kernel内存使用情况和变量内存占用的可视化
-- 通过[Zeppelin api](#使用zeppelin模块)实现的各种平台和note内容控制
+- [Jupyter API](#Jupyter API): File upload/download, terminal interaction, notebook API implementation and performance visualization for Jupyter.
+- [Apache Hive Client API](#Apache Hive Client API): Data fetching and parsing to Pandas Dataframe based on modern HiveServer2 for **both Python 2 and 3**, supports concurrent hive sql execution (with progress bar).
+- [Apache Hue Notebook API](#使用huenotebook调用hue-notebook-api): Data fetching and parsing to Pandas Dataframe from Apache Hue, supports concurrent sql execution (with progress bar) and hive settings.
+- [Apache Zeppelin API](#使用zeppelin模块): implementations on Zeppelin notebook API, supports interaction notebook, upload and download, python file to notebook and vice versa.
+- [Oracle SQL/PLSQL Interface]: Data fetching and parsing to Pandas Dataframe using official Oracle package (i.e. cx_Oracle)
+- [Tunnels]: Interactive SSH, FTP and SFTP.
 
 
-## 使用vulcan.HiveClient运行sql，拉取结果
+## Apache Hive Client API
 ``` python
-from workflow.vulcan import HiveClient
+from workflow.hive import HiveClient
 import pandas as pd
 
-# HiveClient支持国内(`zh`)和墨西哥(`mex`)业务，默认国内。以墨西哥为例：
-hive = HiveClient("mex")
+# Explicitly provide hiveServer
+# Default hiveServer IP and port settings can be set manually in ./settings.py
+hive = HiveClient(auth={
+    "host": "127.0.0.1",
+    "port": "2020",
+    "user": "admin",
+    "password": "admin"})
 
-# 直接返回pandas dataframe
-# 注意：该api不允许hql中出现 `;`
+# automatically retrieve data and parse to pandas dataframe
+# **Warning：`;` is not allowed in sql**
 df = hive.run_hql("show databases")
 df.head()
 
-# 并行提交hql
-lst_results = hive.run_hqls(["show databases", "show tables"])
-df = lst_results[0]
+# concurrent hql execution, progressbar is shown by default
+lst_results = hive.run_hqls(["show databases", "show tables"], progressbar=True)
+print(lst_results[0])   # data from sql "show databases"
+print(lst_results[1])   # data from sql "show tables"
 
-# 直接运行sql文件
-# 可以选择是否并行跑里面的sql
+# execute sql file
+# concurrency can be toggled with submission
 lst_results = hive.run_hql_file("PATH-TO-SQL.sql", concurrent=True)
-# 或者提交完sql任务不阻塞（non-blocking）
+# or, submit sql without tracking the results（non-blocking）
 hive.run_hql_file("PATH-TO-SQL.sql", sync=False)
 ```
 
