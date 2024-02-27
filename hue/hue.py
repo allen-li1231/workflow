@@ -8,6 +8,7 @@ import os
 import time
 import traceback
 import uuid
+import getpass
 from datetime import datetime
 from html import unescape
 from unicodedata import normalize
@@ -64,8 +65,7 @@ class Beeswax(requests.Session):
             raise KeyError("username must be specified with password")
 
         if self.username is not None and self._password is None:
-            print("Please provide Hue password:", end='')
-            self._password = input("")
+            self._password = getpass.getpass("Please provide Hue password: ")
 
         self.log.debug(f"logging in for user: [{self.username}]")
         login_url = self.base_url + '/accounts/login/'
@@ -261,8 +261,7 @@ class Notebook(requests.Session):
             raise KeyError("username must be specified with password")
 
         if self.username is not None and self._password is None:
-            print("Please provide Hue password:", end='')
-            self._password = input("")
+            self._password = getpass.getpass("Please provide Hue password: ")
 
         if "X-Requested-With" in self.headers:
             del self.headers["X-Requested-With"]

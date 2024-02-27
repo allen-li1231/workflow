@@ -5,6 +5,7 @@ import os
 import time
 from typing import Union
 import logging
+import getpass
 import importlib.util
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -31,8 +32,7 @@ class hue:
 
         # global hue_sys, download
         if password is None:
-            print("Please provide password:", end='')
-            password = input("")
+            password = getpass.getpass("Please provide password: ")
 
         self.username = username
         self.name = name

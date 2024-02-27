@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+import getpass
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO, StringIO, IOBase
 
@@ -71,8 +72,7 @@ class HueDownload(requests.Session):
             raise KeyError("username must be specified with password")
 
         if self.username is not None and self._password is None:
-            print("Please provide HueDownload password:", end='')
-            self._password = input("")
+            self._password = getpass.getpass("Please provide HueDownload password: ")
 
         self.log.debug(f"logging in for user [{self.username}]")
         self.id_answer()
