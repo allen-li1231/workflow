@@ -31,7 +31,7 @@ class Tunnel:
 class SSH(paramiko.SSHClient, Tunnel):
     def __init__(self,
                  username, password,
-                 jump_server_username, jump_server_password,
+                 jump_server_username=None, jump_server_password=None,
                  host=None, port=None,
                  file=sys.stdout, verbose=False):
 
@@ -53,26 +53,35 @@ class SSH(paramiko.SSHClient, Tunnel):
         self.load_system_host_keys()
         self.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        self.log.info("connect to jump server")
-        self.connect(self.host, self.port,
-                     username=jump_server_username,
-                     password=jump_server_password)
+        if jump_server_username is None:
+            self.log.info(f"logging in for [{username}] on {self.host}")
+            self.connect(self.host, self.port,
+                         username=username,
+                         password=password)
+        else:
+            self.log.info("connecting to jump server")
+            self.connect(self.host, self.port,
+                         username=jump_server_username,
+                         password=jump_server_password)
+
         self.shell = self.invoke_shell()
         self.shell.set_combine_stderr(True)
 
-        self.log.info(f"logging in for [{username}] on {self.host}")
-        self.shell.send(f"1\r")
-        time.sleep(1)
-        self.shell.send(f"1\r")
-        self.shell.send(f"{username}\r")
+        if not jump_server_username is None:
+            self.log.info(f"logging in for [{username}] on {self.host}")
+            self.shell.send(f"1\r")
+            time.sleep(1)
+            self.shell.send(f"1\r")
+            self.shell.send(f"{username}\r")
 
         self.log.info("start receiver output thread")
         self.print_thread = threading.Thread(target=self.print_forever, args=())
         self.print_thread.setDaemon(True)
         self.print_thread.start()
 
-        time.sleep(1)
-        self.shell.send(f"{password}\r")
+        if not jump_server_username is None:
+            time.sleep(1)
+            self.shell.send(f"{password}\r")
 
     def print_forever(self, wait=0.5):
         this = threading.currentThread()
@@ -107,7 +116,7 @@ class SSH(paramiko.SSHClient, Tunnel):
 class SFTP(paramiko.SFTPClient, Tunnel):
     def __init__(self,
                  username, password,
-                 jump_server_username, jump_server_password,
+                 jump_server_username=None, jump_server_password=None,
                  host=None, port=None,
                  verbose=False):
         self.host = host or JUMP_SERVER_HOST
@@ -124,10 +133,13 @@ class SFTP(paramiko.SFTPClient, Tunnel):
         t = paramiko.Transport(
             sock=(self.host, self.port)
         )
-        t.connect(
-            username=f"{jump_server_username}#{username}#{JUMP_SERVER_BACKEND_HOST}_sftp",
-            password=f"{jump_server_password}#{password}"
-        )
+        if jump_server_username is None:
+            t.connect(username=username, password=password)
+        else:
+            t.connect(
+                username=f"{jump_server_username}#{username}#{JUMP_SERVER_BACKEND_HOST}_sftp",
+                password=f"{jump_server_password}#{password}"
+            )
         chan = t.open_session()
         chan.invoke_subsystem("sftp")
         super().__init__(chan)
