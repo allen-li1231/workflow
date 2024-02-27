@@ -8,16 +8,16 @@ from typing import Iterable
 
 from .compat import HiveServer2CompatCursor, _in_old_env
 from ..logger import set_stream_log_level
-from ..utils import get_ip
-from ..settings import (VULCAN_ZH_IP, VULCAN_MEX_IP,
-                       VULCAN_ZH_ROUTER_IP, VULCAN_MEX_ROUTER_IP,
-                       VULCAN_CONCURRENT_SQL, MAX_LEN_PRINT_SQL,
-                       PROGRESSBAR, HIVE_PERFORMANCE_SETTINGS)
+# from ..utils import get_ip
+from ..settings import (HIVESERVER_IP, HIVESERVER_PORT,
+                        HIVECLI_MAX_CONCURRENT_SQL, MAX_LEN_PRINT_SQL,
+                        PROGRESSBAR, HIVE_PERFORMANCE_SETTINGS)
 
 
 class HiveClient:
     def __init__(self,
-                 env='zh',
+                #  env='zh',
+                 auth: dict = None,
                  database: str = None,
                  config: dict = None,
                  verbose=False
@@ -25,33 +25,39 @@ class HiveClient:
 
         self.log = logging.getLogger(__name__ + f".HiveClient")
         set_stream_log_level(self.log, verbose=verbose)
+        self.auth = auth if isinstance(auth, dict) else {
+            'host': HIVESERVER_IP,
+            'port': HIVESERVER_PORT,
+            'user': input('Please provide Hive username:'),
+            'password': getpass.getpass('Please provide Hive password:'),
+            'auth_mechanism': 'PLAIN'
+        }
+        # ip = get_ip()
+        # if env == 'zh':
+        #     auth = {
+        #         'host': VULCAN_ZH_IP if ip.startswith("10.212") else VULCAN_ZH_ROUTER_IP,
+        #         'port': 10000,
+        #         'user': input('请输入 Hive 用户名:'),
+        #         'password': getpass.getpass('请输入 Hive 密码:'),
+        #         'auth_mechanism': 'PLAIN'
+        #     }
+        # elif env == 'mex':
+        #     auth = {
+        #         'host': VULCAN_MEX_IP if ip.startswith("10.212") else VULCAN_MEX_ROUTER_IP,
+        #         'port': 10000,
+        #         'user': 'vulcan-x',
+        #         'password': 'vulcan-x',
+        #         'auth_mechanism': 'PLAIN'
+        #     }
+        # else:
+        #     raise ValueError("env name `{}` currently not supported ".format(env))
 
-        ip = get_ip()
-        if env == 'zh':
-            auth = {
-                'host': VULCAN_ZH_IP if ip.startswith("10.212") else VULCAN_ZH_ROUTER_IP,
-                'port': 10000,
-                'user': input('请输入 Hive 用户名:'),
-                'password': getpass.getpass('请输入 Hive 密码:'),
-                'auth_mechanism': 'PLAIN'
-            }
-        elif env == 'mex':
-            auth = {
-                'host': VULCAN_MEX_IP if ip.startswith("10.212") else VULCAN_MEX_ROUTER_IP,
-                'port': 10000,
-                'user': 'vulcan-x',
-                'password': 'vulcan-x',
-                'auth_mechanism': 'PLAIN'
-            }
-        else:
-            raise ValueError("env name `{}` currently not supported ".format(env))
-
-        self.env = env
+        # self.env = env
         self.config = HIVE_PERFORMANCE_SETTINGS.copy() if config is None else config
         self._auth = auth
         self._workers = [
             HiveServer2CompatCursor(
-                **auth,
+                **self._auth,
                 database=database,
                 config=config,
                 name="HiveClient-worker-0",
@@ -121,7 +127,7 @@ class HiveClient:
                  sqls,
                  param=None,
                  config=None,
-                 n_jobs=VULCAN_CONCURRENT_SQL,
+                 n_jobs=HIVECLI_MAX_CONCURRENT_SQL,
                  wait_sec=0.,
                  progressbar=True,
                  progressbar_offset=0,

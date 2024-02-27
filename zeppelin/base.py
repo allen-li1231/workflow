@@ -1,5 +1,6 @@
 import time
 import logging
+import getpass
 import requests
 
 from .. import logger
@@ -38,8 +39,7 @@ class ZeppelinBase(requests.Session):
             raise KeyError("username must be specified with password")
 
         if self.username is not None and self._password is None:
-            print("Please provide Zeppelin password:", end='')
-            self._password = input("")
+            self._password = getpass.getpass("Please provide Zeppelin password: ")
 
         self.log.debug(f"logging in for user: [{self.username}]")
         res = self._login(username=self.username, password=self._password)
