@@ -50,6 +50,8 @@ j.close_terminal(terminal_name)
 ___
 
 ## Apache Hive Client API
+> :bell:To use the client, one must first install [impyla](https://github.com/cloudera/impyla) via pip,
+otherwise the following example will not work.
 ``` python
 from workflow.hive import HiveClient
 import pandas as pd
@@ -205,8 +207,8 @@ p.delete()
 ___
 
 ### Oracle SQL Interface
-> :bell:To use the interface, one must first install [cx_Oracle](https://oracle.github.io/python-cx_Oracle/),
-otherwise the following example will not work
+> :bell:To use the interface, one must first manually install [cx_Oracle](https://oracle.github.io/python-cx_Oracle/),
+otherwise the following example will not work.
 ```python
 from workflow.jump_server import Oracle
 
@@ -226,8 +228,8 @@ print(df)
 ___
 
 ### Tunnels
-> :bell:To use the interface, one must first install [paramiko](https://www.paramiko.org/),
-otherwise the following example will not work
+> :bell:To use the interface, one must first install [paramiko](https://www.paramiko.org/) via pip,
+otherwise the following example will not work.
 #### Interactive SSH Tunnel
 ```python
 from workflow.jump_server import SSH
@@ -265,6 +267,8 @@ ssh.close()
 ```
 ---
 ### Other Useful Tools
+> :bell:To use the interface, one must first install [openpyxl](https://openpyxl.readthedocs.io/en/stable/)
+via pip, otherwise the following example will not work.
 ```python
 from workflow import utils
 
