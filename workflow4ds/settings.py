@@ -25,15 +25,15 @@ HIVE_PERFORMANCE_SETTINGS = {
 
     # when nodes read data from HDFS, combine small files < 16 MB to decrease number of mappers
     "hive.tez.input.format": "org.apache.hadoop.hive.ql.io.HiveInputFormat",
-    "tez.grouping.min-size": "16777216",
-    "tez.grouping.max-size": "256000000",
+    # "tez.grouping.min-size": "16777216",
+    # "tez.grouping.max-size": "256000000",
     "tez.grouping.split-waves": "1.8",
     # enable block read from HDFS, which decreases number of mappers while using mr engine
-    "mapred.min.split.size": "16777216",
-    "mapred.max.split.size": "256000000",
-    "mapreduce.input.fileinputformat.split.minsize": "16777216",
+    # "mapred.min.split.size": "16777216",
+    # "mapred.max.split.size": "256000000",
+    # "mapreduce.input.fileinputformat.split.minsize": "16777216",
     # max(mapred.min.split.size, min(mapred.max.split.size, dfs.block.size))
-    "mapreduce.input.fileinputformat.split.maxsize": "256000000",
+    # "mapreduce.input.fileinputformat.split.maxsize": "256000000",
 
     # vectorization and parallelism
     "hive.vectorized.execution.enabled": "true",
@@ -77,9 +77,9 @@ HIVE_PERFORMANCE_SETTINGS = {
 
     "hive.optimize.skewjoin": "true",
     "hive.optimize.skewjoin.compiletime": "true",
-    "hive.skewjoin.key": "100000",
-    "hive.skewjoin.mapjoin.map.tasks": "10000",
-    "hive.skewjoin.mapjoin.min.split": "33554432",
+    # "hive.skewjoin.key": "100000",
+    # "hive.skewjoin.mapjoin.map.tasks": "10000",
+    # "hive.skewjoin.mapjoin.min.split": "33554432",
 
     # "hive.optimize.union.remove": "true",
 
