@@ -1,5 +1,5 @@
-# Workflow: Data Pipeline Integration for Data Scientists
-## Modules that Implement:
+# Workflow: Data Pipeline Integrated for Data Scientists
+## Includes Modules:
 
 - [Jupyter API](#Jupyter-API): For those who work with a remote Jupyter server, workflow provides file upload/download, terminal interaction, notebook API implementation and performance visualization for Jupyter.
 - [Apache Hive Client API](#Apache-Hive-Client-API): **Stable** Data fetching and parsing to Pandas Dataframe based on modern HiveServer2 for **both Python 2 and 3** as the official python package for HiveServer2 is unstable in the latest python version. Supports concurrent hive sql execution (with a nice progress bar).
@@ -9,6 +9,28 @@
 - [Tunnels](#Tunnels): Interactive SSH, FTP and SFTP.
 - [Other Useful Tools](#Other-Useful-Tools)
 
+## How to Install
+
+The module includes multiple submodule, you can conveniently install all submodules via:
+```sh
+pip install workflow4ds[all]
+```
+
+You can also install one of modules based on your needs.
+To install only Hive module:
+```sh
+pip install workflow4ds[hive]
+```
+
+To install only Hue module:
+```sh
+pip install workflow4ds[hue]
+```
+
+To install only tunnel module:
+```sh
+pip install workflow4ds[tunnel]
+```
 ___
 
 ## Jupyter API
