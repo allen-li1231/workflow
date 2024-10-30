@@ -54,5 +54,5 @@ def set_stream_log_level(log, verbose):
         else:
             setup_stdout_level(log, logging.WARNING)
 
-
-set_log_path(root, path=os.path.join(os.getcwd(), "workflow.log"))
+log_file = os.path.join(os.getcwd(), "workflow.log")
+set_log_path(root, path=log_file)
