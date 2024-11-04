@@ -12,3 +12,4 @@ main.py
 *.egg-info
 build/
 dist/
+test/
