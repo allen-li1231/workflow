@@ -13,23 +13,23 @@
 
 The module includes multiple submodule, you can conveniently install all submodules via:
 ```sh
-pip install workflow4ds[all]
+pip install "workflow4ds[all]"
 ```
 
 You can also install one of modules based on your needs.
 To install only Hive module:
 ```sh
-pip install workflow4ds[hive]
+pip install "workflow4ds[hive]"
 ```
 
 To install only Hue module:
 ```sh
-pip install workflow4ds[hue]
+pip install "workflow4ds[hue]"
 ```
 
 To install only tunnel module:
 ```sh
-pip install workflow4ds[tunnel]
+pip install "workflow4ds[tunnel]"
 ```
 ___
 
