@@ -1,13 +1,13 @@
 import cx_Oracle
 import logging
 from .. import logger
-from ..settings import JUMP_SERVER_PLSQL_HOST, JUMP_SERVER_PLSQL_SERVICE_NAME, MAX_LEN_PRINT_SQL
+from ..settings import JUMP_SERVER_ORACLE_HOST, JUMP_SERVER_ORACLE_SERVICE_NAME, JUMP_SERVER_ORACLE_SID, MAX_LEN_PRINT_SQL
 
 
 class Oracle:
     def __init__(self, username, password,
-                 service_name=None, hostname=None,
-                 verbose=False):
+                 service_name=None, sid=None, hostname=None,
+                 port=1521, verbose=False):
 
         self.verbose = verbose
         self.log = logging.getLogger(__name__ + ".Oracle")
@@ -15,20 +15,28 @@ class Oracle:
             logger.set_stream_log_level(self.log, verbose=self.verbose)
 
         """ Connect to the database. """
-        self.hostname = hostname or JUMP_SERVER_PLSQL_HOST \
+        self.hostname = hostname or JUMP_SERVER_ORACLE_HOST \
                         or ValueError("hostname not provided in argument or in settings")
-        self.service_name = service_name or JUMP_SERVER_PLSQL_SERVICE_NAME \
-                            or ValueError("service_name not provided in argument or in settings")
+        self.port = port
+        self.service_name = service_name or JUMP_SERVER_ORACLE_SERVICE_NAME
+        self.sid = sid or JUMP_SERVER_ORACLE_SID
+        if self.service_name is None and self.sid is None:
+            raise ValueError("either service_name or sid should be provided")
+
+        if self.sid is not None:
+            self.log.info(f"connect Oracle server for [{username}] on {self.sid}")
+            dsn = cx_Oracle.makedsn(self.hostname, str(self.port), self.sid)
+        else:
+            self.log.info(f"connect Oracle server for [{username}] on {self.service_name}")
+            dsn = cx_Oracle.makedsn(self.hostname, str(self.port), service_name=self.service_name)
         try:
-            service = self.hostname + '/' + self.service_name
-            self.log.info(f"connect PL/SQL server for [{username}] on {service}")
-            self.db = cx_Oracle.connect(username, password, service)
-            self.db.autocommit = True
+            self.db = cx_Oracle.connect(username, password, dsn=dsn)
         except cx_Oracle.DatabaseError as e:
             self.log.exception(e)
             raise e
         # If the database connection succeeded create the cursor
         # we-re going to use.
+        self.db.autocommit = True
         self.cursor = self.db.cursor()
 
     def close(self):
