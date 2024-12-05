@@ -94,6 +94,13 @@ class Oracle:
 
         return {"data": data, "columns": col_names}
 
+    def run_sql(self, sql: str, n_rows: int = -1):
+        self.execute(sql)
+        if n_rows <= 0:
+            return self.fetchall()
+
+        return self.fetchmany(n_rows)
+
     def desc(self, table_name: str, upper_case=True):
         if upper_case:
             table_name = table_name.upper()
@@ -107,5 +114,5 @@ class Oracle:
                 data_precision
             from all_tab_columns
             where table_name = '{table_name}'""")
-        
+
         return self.fetchall()
