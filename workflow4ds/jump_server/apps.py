@@ -106,7 +106,7 @@ class Oracle:
             return pd.DataFrame(**data)
         return data
 
-    def desc(self, table_name: str, upper_case=True):
+    def desc(self, table_name: str, upper_case=True, return_df=False):
         if upper_case:
             table_name = table_name.upper()
     
@@ -119,5 +119,9 @@ class Oracle:
                 data_precision
             from all_tab_columns
             where table_name = '{table_name}'""")
-
-        return self.fetchall()
+        
+        data = self.fetchall()
+        if return_df:
+            import pandas as pd
+            return pd.DataFrame(**data)
+        return data
