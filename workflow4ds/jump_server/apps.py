@@ -94,12 +94,17 @@ class Oracle:
 
         return {"data": data, "columns": col_names}
 
-    def run_sql(self, sql: str, n_rows: int = -1):
+    def run_sql(self, sql: str, n_rows: int = -1, return_df=False):
         self.execute(sql)
         if n_rows <= 0:
-            return self.fetchall()
-
-        return self.fetchmany(n_rows)
+            data = self.fetchall()
+        else:
+            data = self.fetchmany(n_rows)
+        
+        if return_df:
+            import pandas as pd
+            return pd.DataFrame(**data)
+        return data
 
     def desc(self, table_name: str, upper_case=True):
         if upper_case:
