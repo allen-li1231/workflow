@@ -85,3 +85,11 @@ class Oracle:
             col_names.append(self.cursor.description[i][0])
 
         return {"data": data, "columns": col_names}
+
+    def fetchmany(self, n):
+        data = self.cursor.fetchmany(n)
+        col_names = []
+        for i in range(0, len(self.cursor.description)):
+            col_names.append(self.cursor.description[i][0])
+
+        return {"data": data, "columns": col_names}
