@@ -93,3 +93,19 @@ class Oracle:
             col_names.append(self.cursor.description[i][0])
 
         return {"data": data, "columns": col_names}
+
+    def desc(self, table_name: str, upper_case=True):
+        if upper_case:
+            table_name = table_name.upper()
+    
+        self.cursor.execute(f"""
+            select owner,
+                table_name,
+                column_name,
+                data_type,
+                data_length,
+                data_precision
+            from all_tab_columns
+            where table_name = '{table_name}'""")
+        
+        return self.fetchall()
