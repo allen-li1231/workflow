@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "workflow4ds"
-version = "0.2.7"
+version = "0.2.8"
 authors = [
   { name="Allen Li", email="supermrli@hotmail.com" },
 ]
@@ -19,7 +19,8 @@ classifiers = [
 dependencies = [
     "requests",
     "tqdm",
-    "openpyxl"
+    "openpyxl",
+    "pandas"
 ]
 
 [project.urls]
@@ -29,5 +30,7 @@ Issues = "https://github.com/allen-li1231/workflow/issues"
 [project.optional-dependencies]
 hive = ["impyla"]
 hue = ["requests_toolbelt"]
-tunnel = ["paramiko", "cx_Oracle"]
-all = ['workflow4ds[hive,hue,tunnel]']
+tunnel = ["paramiko"]
+oracle = ["cx_Oracle"]
+doris = ["sqlalchemy"]
+all = ["workflow4ds[hive,hue,tunnel,oracle,doris]"]
