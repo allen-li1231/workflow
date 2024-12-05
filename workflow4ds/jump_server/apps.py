@@ -59,7 +59,7 @@ class Oracle:
         """
         try:
             self.log.info(f"execute sql: {sql[:MAX_LEN_PRINT_SQL]}")
-            self.cursor.execute(sql.rstrip(';'))
+            self.cursor.execute(sql.strip(";\n\b\t"))
         except cx_Oracle.DatabaseError as e:
             # Log error as appropriate
             self.log.exception(e)
@@ -86,40 +86,48 @@ class Oracle:
 
         return {"data": data, "columns": col_names}
 
-    def fetchmany(self, n):
-        data = self.cursor.fetchmany(n)
+    def fetchmany(self, n_rows):
+        data = self.cursor.fetchmany(n_rows)
         col_names = []
         for i in range(0, len(self.cursor.description)):
             col_names.append(self.cursor.description[i][0])
 
         return {"data": data, "columns": col_names}
 
-    def run_sql(self, sql: str, n_rows: int = -1, return_df=False):
+    def run_sql(self, sql: str, n_rows: int = -1, return_df=True):
         self.execute(sql)
         if n_rows <= 0:
             data = self.fetchall()
         else:
             data = self.fetchmany(n_rows)
-        
+
         if return_df:
             import pandas as pd
             return pd.DataFrame(**data)
         return data
 
-    def desc(self, table_name: str, upper_case=True, return_df=False):
+    def desc(self, owner: str, table_name: str, upper_case=True, return_df=True):
         if upper_case:
+            owner = owner.upper()
             table_name = table_name.upper()
     
         self.cursor.execute(f"""
-            select owner,
-                table_name,
-                column_name,
-                data_type,
-                data_length,
-                data_precision
-            from all_tab_columns
-            where table_name = '{table_name}'""")
-        
+            select
+                tab.column_name,
+                cmt.comments,
+                tab.data_type,
+                tab.data_length,
+                tab.data_precision,
+                tab.NUM_DISTINCT,
+                tab.NUM_NULLS,
+                tab.density
+            from all_tab_columns tab
+            join all_col_comments cmt
+                on tab.table_name = cmt.table_name
+                and tab.owner = cmt.owner
+                and tab.column_name = cmt.column_name
+            where tab.table_name = '{table_name}' and tab.owner = '{owner}'""")
+
         data = self.fetchall()
         if return_df:
             import pandas as pd
