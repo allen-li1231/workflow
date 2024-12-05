@@ -27,7 +27,7 @@ Homepage = "https://github.com/allen-li1231/workflow"
 Issues = "https://github.com/allen-li1231/workflow/issues"
 
 [project.optional-dependencies]
-hive = ["impala"]
+hive = ["impyla"]
 hue = ["requests_toolbelt"]
 tunnel = ["paramiko", "cx_Oracle"]
 all = ['workflow4ds[hive,hue,tunnel]']
