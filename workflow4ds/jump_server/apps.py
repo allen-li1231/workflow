@@ -59,7 +59,7 @@ class Oracle:
         """
         try:
             self.log.info(f"execute sql: {sql[:MAX_LEN_PRINT_SQL]}")
-            self.cursor.execute(sql)
+            self.cursor.execute(sql.rstrip(';'))
         except cx_Oracle.DatabaseError as e:
             # Log error as appropriate
             self.log.exception(e)
