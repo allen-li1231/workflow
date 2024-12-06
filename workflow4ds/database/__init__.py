@@ -8,6 +8,6 @@ if find_spec("cx_Oracle"):
     __all__.append("Oracle")
 
 # only allow user to use Oracle class if cx_Oracle is installed
-if find_spec("adbc_driver_manager") and find_spec("adbc_driver_flightsql"):
+if find_spec("sqlalchemy"):
     from .doris import Doris
     __all__.append("Doris")
