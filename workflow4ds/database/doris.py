@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL
-from sqlalchemy.exc import DatabaseError
+from sqlalchemy.exc import DatabaseError, ResourceClosedError
 from sqlalchemy.sql.expression import text
 
 import pandas as pd
@@ -60,12 +60,22 @@ class Doris:
             self.log.exception(e)
             raise e
 
-        if n_rows < 0:
-            data = res.fetchall()
-        else:
-            data = res.fetchmany(n_rows)
+        try:
+            if n_rows < 0:
+                data = res.fetchall()
+            else:
+                data = res.fetchmany(n_rows)
+        except ResourceClosedError as e:
+            if str(e) == "This result object does not return rows. It has been closed automatically.":
+                return
+            self.log.exception(e)
+            raise e
 
         if return_df:
             return pd.DataFrame(data, columns=res.keys())
 
         return data
+
+    def show_create_table(self, table_name):
+        res = self.db.execute(f"show create table {table_name}").fetchall()
+        print(res[0][1])

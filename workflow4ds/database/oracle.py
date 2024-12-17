@@ -1,4 +1,5 @@
 import cx_Oracle
+from cx_Oracle import InterfaceError
 import logging
 from .. import logger
 from ..settings import JUMP_SERVER_ORACLE_HOST, JUMP_SERVER_ORACLE_SERVICE_NAME, JUMP_SERVER_ORACLE_SID, MAX_LEN_PRINT_SQL
@@ -96,10 +97,14 @@ class Oracle:
 
     def run_sql(self, sql: str, n_rows: int = -1, return_df=True):
         self.execute(sql)
-        if n_rows <= 0:
-            data = self.fetchall()
-        else:
-            data = self.fetchmany(n_rows)
+        try:
+            if n_rows <= 0:
+                data = self.fetchall()
+            else:
+                data = self.fetchmany(n_rows)
+        except InterfaceError as e:
+            if str(e) != "not a query":
+                raise e
 
         if return_df:
             import pandas as pd
