@@ -103,8 +103,9 @@ class Oracle:
             else:
                 data = self.fetchmany(n_rows)
         except InterfaceError as e:
-            if str(e) != "not a query":
-                raise e
+            if str(e) == "not a query":
+                return
+            raise e
 
         if return_df:
             import pandas as pd
