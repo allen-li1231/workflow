@@ -77,5 +77,5 @@ class Doris:
         return data
 
     def show_create_table(self, table_name):
-        res = self.db.execute(f"show create table {table_name}").fetchall()
+        res = self.db.execute(text(f"show create table {table_name}")).fetchall()
         print(res[0][1])
