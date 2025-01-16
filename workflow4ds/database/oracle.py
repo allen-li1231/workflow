@@ -1,5 +1,6 @@
 import cx_Oracle
 from cx_Oracle import InterfaceError
+from tqdm.auto import tqdm
 import logging
 from .. import logger
 from ..settings import JUMP_SERVER_ORACLE_HOST, JUMP_SERVER_ORACLE_SERVICE_NAME, JUMP_SERVER_ORACLE_SID, MAX_LEN_PRINT_SQL
@@ -139,3 +140,15 @@ class Oracle:
             import pandas as pd
             return pd.DataFrame(**data)
         return data
+
+    def insert_into(self, table_name: str, dataframe, chunksize=1024):
+        for i in tqdm(range(0, dataframe.shape[0], chunksize)):
+            s_values = ''.join([f'\ninto {table_name} values ('
+                                + ','.join([f"'{val}'"
+                                            if isinstance(val, (str, int, float))
+                                            else f"TO_DATE('{val.strftime("%Y-%m-%d %H:%M:%S")}', 'yyyy-mm-dd hh24:mi:ss')"
+                                            for val in row])
+                                + ')' for row in dataframe.iloc[i: i+chunksize-1, :].values
+            ])
+            sql_load = f"insert all {s_values}\nSELECT * FROM DUAL;"
+            self.execute(sql_load)

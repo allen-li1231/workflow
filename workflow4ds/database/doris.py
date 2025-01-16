@@ -2,16 +2,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL
 from sqlalchemy.exc import DatabaseError, ResourceClosedError
 from sqlalchemy.sql.expression import text
-from sqlalchemy.dialects import registry
 
 import pandas as pd
 import logging
 
 from .. import logger
 from ..settings import MAX_LEN_PRINT_SQL
-
-registry.register("doris", "workflow4ds.database.doris_dialect", "DorisDialect")
-
 
 class Doris:
     def __init__(self, username: str, password: str,

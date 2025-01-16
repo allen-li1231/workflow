@@ -23,7 +23,7 @@ from sqlalchemy import log, exc, text
 from sqlalchemy.dialects.mysql.mysqldb import MySQLDialect_mysqldb
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import OperationalError
-from pydoris.sqlalchemy import datatype
+from . import datatype
 from sqlalchemy.sql import compiler
 
 logger = logging.getLogger(__name__)
@@ -122,7 +122,7 @@ class DorisDialect(MySQLDialect_mysqldb):
     # and tests are needed before being enabled
     supports_statement_cache = False
     type_compiler = DorisTypeCompiler
-    name = 'pydoris'
+    name = 'workflow4ds_pydoris'
 
     def __init__(self, *args, **kw):
         super(DorisDialect, self).__init__(*args, **kw)
