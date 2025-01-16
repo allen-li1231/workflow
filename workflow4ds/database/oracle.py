@@ -152,3 +152,5 @@ class Oracle:
             ])
             sql_load = f"insert all {s_values}\nSELECT * FROM DUAL;"
             self.execute(sql_load)
+
+        return dataframe.shape[0]
