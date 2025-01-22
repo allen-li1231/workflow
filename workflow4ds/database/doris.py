@@ -32,7 +32,7 @@ class Doris:
             port=port,
             database=database
         )
-        self.engine = create_engine(uri, fast_executemany=True)
+        self.engine = create_engine(uri)
         self.db = self.engine.connect()
 
     def close(self):

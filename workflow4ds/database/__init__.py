@@ -9,5 +9,6 @@ if find_spec("cx_Oracle"):
 
 # only allow user to use Oracle class if cx_Oracle is installed
 if find_spec("sqlalchemy"):
+    import compat
     from .doris import Doris
     __all__.append("Doris")
